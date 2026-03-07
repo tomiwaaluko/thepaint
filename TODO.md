@@ -10,8 +10,8 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 ## Current Status
 
 **Active Phase:** Phase 1 — Data Infrastructure
-**Current Task:** Project scaffold and Docker setup
-**Last Updated:** Session 1
+**Current Task:** Validate backfill (row counts)
+**Last Updated:** Session 2
 
 ---
 
@@ -46,19 +46,19 @@ in TODO.md and run any relevant tests before stopping.
 **Phase File:** `.claude/phases/phase-1-data-infrastructure.md`
 **Goal:** PostgreSQL DB running, nba_api ingestion working, 2015–2025 data backfilled.
 
-- [ ] Repo scaffold — pyproject.toml, Dockerfile, docker-compose.yml, .env.example
-- [ ] Database session setup — the_paint/db/session.py
-- [ ] ORM models — the_paint/db/models.py
-- [ ] Alembic migrations — initial schema
-- [ ] Custom exceptions — the_paint/exceptions.py
-- [ ] App config — the_paint/config.py
-- [ ] NBAFetcher — the_paint/ingestion/nba_fetcher.py
-- [ ] Player game log ingestion — ingest_player_season()
-- [ ] Team game log ingestion — ingest_team_season()
-- [ ] Injury feed ingestion — the_paint/ingestion/injury_fetcher.py
-- [ ] Odds API ingestion — the_paint/ingestion/odds_fetcher.py
-- [ ] Backfill script — scripts/backfill.py
-- [ ] Ingestion tests — tests/test_ingestion/
+- [x] Repo scaffold — pyproject.toml, Dockerfile, docker-compose.yml, .env.example
+- [x] Database session setup — chalk/db/session.py
+- [x] ORM models — chalk/db/models.py
+- [x] Alembic migrations — initial schema
+- [x] Custom exceptions — chalk/exceptions.py
+- [x] App config — chalk/config.py
+- [x] NBAFetcher — chalk/ingestion/nba_fetcher.py
+- [x] Player game log ingestion — ingest_player_season()
+- [x] Team game log ingestion — ingest_team_season()
+- [x] Injury feed ingestion — chalk/ingestion/injury_fetcher.py
+- [x] Odds API ingestion — chalk/ingestion/odds_fetcher.py
+- [x] Backfill script — scripts/backfill.py
+- [x] Ingestion tests — tests/test_ingestion/ (25 tests passing)
 - [ ] Validate backfill — row counts match Basketball-Reference
 
 **Phase 1 Done When:** `docker compose up` works, migrations run clean, backfill script populates all tables, any player's last 30 game logs queryable in < 100ms.
