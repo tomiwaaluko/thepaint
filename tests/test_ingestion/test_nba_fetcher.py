@@ -69,16 +69,24 @@ class TestParseMinutes:
     def test_empty_string(self):
         assert _parse_minutes("") == 0.0
 
+    def test_integer_input(self):
+        assert _parse_minutes(38) == 38.0
+
+    def test_float_input(self):
+        assert _parse_minutes(32.5) == 32.5
+
 
 class TestParseMatchup:
     def test_home_game(self):
-        is_home, opp = _parse_matchup("LAL vs. GSW")
+        team, opp, is_home = _parse_matchup("LAL vs. GSW")
         assert is_home is True
+        assert team == "LAL"
         assert opp == "GSW"
 
     def test_away_game(self):
-        is_home, opp = _parse_matchup("LAL @ GSW")
+        team, opp, is_home = _parse_matchup("LAL @ GSW")
         assert is_home is False
+        assert team == "LAL"
         assert opp == "GSW"
 
 

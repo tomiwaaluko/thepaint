@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import random
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import structlog
@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chalk.config import settings
 from chalk.db.models import PlayerGameLog, TeamGameLog
 from chalk.exceptions import IngestError
+from chalk.ingestion.seed import team_id_from_abbr, upsert_games, upsert_player
 
 log = structlog.get_logger()
 
@@ -61,8 +62,13 @@ async def _fetch_with_backoff(endpoint_cls, params: dict, endpoint_name: str) ->
     raise IngestError(f"Permanent failure: {endpoint_name}")  # pragma: no cover
 
 
-def _parse_minutes(min_str: str | None) -> float:
-    """Convert '32:14' or '32' to 32.23."""
+def _parse_minutes(min_val: str | int | float | None) -> float:
+    """Convert '32:14' or 32 or 32.5 to float minutes."""
+    if min_val is None:
+        return 0.0
+    if isinstance(min_val, (int, float)):
+        return float(min_val)
+    min_str = str(min_val).strip()
     if not min_str:
         return 0.0
     if ":" in min_str:
@@ -98,7 +104,7 @@ async def upsert_player_game_logs(session: AsyncSession, rows: list[dict]) -> in
             "fta": stmt.excluded.fta,
             "plus_minus": stmt.excluded.plus_minus,
             "starter": stmt.excluded.starter,
-            "updated_at": datetime.now(UTC),
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
         },
     )
     result = await session.execute(stmt)
@@ -134,13 +140,15 @@ async def upsert_team_game_logs(session: AsyncSession, rows: list[dict]) -> int:
     return result.rowcount
 
 
-def _parse_matchup(matchup: str) -> tuple[bool, str]:
-    """Parse 'LAL vs. GSW' or 'LAL @ GSW' into (is_home, opponent_abbr)."""
+def _parse_matchup(matchup: str) -> tuple[str, str, bool]:
+    """Parse 'LAL vs. GSW' or 'LAL @ GSW' into (team_abbr, opponent_abbr, is_home)."""
     if " vs. " in matchup:
         parts = matchup.split(" vs. ")
-        return True, parts[1].strip()
-    parts = matchup.split(" @ ")
-    return False, parts[1].strip()
+        return parts[0].strip(), parts[1].strip(), True
+    if " @ " in matchup:
+        parts = matchup.split(" @ ")
+        return parts[0].strip(), parts[1].strip(), False
+    return matchup.strip(), "", False
 
 
 async def ingest_player_season(
@@ -148,6 +156,7 @@ async def ingest_player_season(
     player_id: int,
     season: str,
     team_id: int = 0,
+    player_name: str = "",
 ) -> int:
     """Ingest all game logs for a player-season. Returns rows upserted."""
     data = await _fetch_with_backoff(
@@ -156,22 +165,53 @@ async def ingest_player_season(
         endpoint_name="PlayerGameLog",
     )
 
+    entries = data.get("PlayerGameLog", [])
+    if not entries:
+        return 0
+
+    # Resolve team_id from matchup of first entry if not provided
+    first_matchup = entries[0].get("MATCHUP", "")
+    first_team_abbr, _, _ = _parse_matchup(first_matchup)
+    effective_team_id = team_id if team_id > 0 else team_id_from_abbr(first_team_abbr)
+
+    # Upsert the player record (FK: players)
+    await upsert_player(session, player_id, player_name or str(player_id), effective_team_id)
+
+    # Build game records and game log rows
+    game_rows = []
+    seen_games = set()
     rows = []
-    for entry in data.get("PlayerGameLog", []):
+    for entry in entries:
         game_date = datetime.strptime(entry["GAME_DATE"], "%b %d, %Y").date()
-        is_home, _ = _parse_matchup(entry.get("MATCHUP", ""))
+        game_id = entry["Game_ID"]
+        matchup = entry.get("MATCHUP", "")
+        team_abbr, opp_abbr, is_home = _parse_matchup(matchup)
+        entry_team_id = team_id_from_abbr(team_abbr) or effective_team_id
+        opp_team_id = team_id_from_abbr(opp_abbr) or effective_team_id
+
+        # Create game record if we haven't seen this game_id yet
+        if game_id not in seen_games:
+            seen_games.add(game_id)
+            game_rows.append({
+                "game_id": game_id,
+                "date": game_date,
+                "season": season,
+                "home_team_id": entry_team_id if is_home else opp_team_id,
+                "away_team_id": opp_team_id if is_home else entry_team_id,
+            })
+
         rows.append({
-            "game_id": entry["Game_ID"],
+            "game_id": game_id,
             "player_id": player_id,
-            "team_id": team_id or entry.get("TEAM_ID", 0),
+            "team_id": entry_team_id,
             "game_date": game_date,
             "season": season,
             "min_played": _parse_minutes(entry.get("MIN")),
-            "pts": entry["PTS"] or 0,
-            "reb": entry["REB"] or 0,
-            "ast": entry["AST"] or 0,
-            "stl": entry["STL"] or 0,
-            "blk": entry["BLK"] or 0,
+            "pts": entry.get("PTS") or 0,
+            "reb": entry.get("REB") or 0,
+            "ast": entry.get("AST") or 0,
+            "stl": entry.get("STL") or 0,
+            "blk": entry.get("BLK") or 0,
             "to_committed": entry.get("TOV", 0) or 0,
             "fg3m": entry.get("FG3M", 0) or 0,
             "fg3a": entry.get("FG3A", 0) or 0,
@@ -183,6 +223,9 @@ async def ingest_player_season(
             "starter": False,  # nba_api PlayerGameLog doesn't include starter info
         })
 
+    # Upsert game records first (FK: games), then game logs
+    await upsert_games(session, game_rows)
+    await session.commit()
     return await upsert_player_game_logs(session, rows)
 
 
@@ -194,21 +237,44 @@ async def ingest_team_season(session: AsyncSession, season: str) -> int:
         endpoint_name="LeagueGameLog_Teams",
     )
 
+    entries = data.get("LeagueGameLog", [])
+    if not entries:
+        return 0
+
+    # Build game records from team logs (each game appears twice — once per team)
+    game_rows = []
+    seen_games = {}  # game_id -> {teams seen}
     rows = []
-    for entry in data.get("LeagueGameLog", []):
+
+    for entry in entries:
         game_date_str = entry.get("GAME_DATE", "")
         try:
             game_date = datetime.strptime(game_date_str, "%b %d, %Y").date()
         except ValueError:
             game_date = date.fromisoformat(game_date_str)
 
+        game_id = entry["GAME_ID"]
+        entry_team_id = entry["TEAM_ID"]
+        matchup = entry.get("MATCHUP", "")
+        is_home = " vs. " in matchup
+
+        # Track teams per game to build proper home/away game records
+        if game_id not in seen_games:
+            seen_games[game_id] = {
+                "date": game_date, "home": None, "away": None,
+            }
+        if is_home:
+            seen_games[game_id]["home"] = entry_team_id
+        else:
+            seen_games[game_id]["away"] = entry_team_id
+
         rows.append({
-            "game_id": entry["GAME_ID"],
-            "team_id": entry["TEAM_ID"],
+            "game_id": game_id,
+            "team_id": entry_team_id,
             "game_date": game_date,
             "season": season,
             "pts": entry.get("PTS", 0) or 0,
-            "pace": 0.0,  # Not in LeagueGameLog, computed later
+            "pace": 0.0,
             "off_rtg": 0.0,
             "def_rtg": 0.0,
             "ts_pct": 0.0,
@@ -219,4 +285,19 @@ async def ingest_team_season(session: AsyncSession, season: str) -> int:
             "fg3a_rate": 0.0,
         })
 
+    # Build game records with proper home/away
+    for gid, info in seen_games.items():
+        home = info["home"] or (info["away"] or 0)
+        away = info["away"] or (info["home"] or 0)
+        game_rows.append({
+            "game_id": gid,
+            "date": info["date"],
+            "season": season,
+            "home_team_id": home,
+            "away_team_id": away,
+        })
+
+    # Upsert games first, then team logs
+    await upsert_games(session, game_rows)
+    await session.commit()
     return await upsert_team_game_logs(session, rows)

@@ -16,6 +16,7 @@ from chalk.db.models import PlayerGameLog
 from chalk.db.session import async_session_factory
 from chalk.exceptions import IngestError
 from chalk.ingestion.nba_fetcher import ingest_player_season, ingest_team_season
+from chalk.ingestion.seed import seed_teams
 
 log = structlog.get_logger()
 
@@ -59,6 +60,10 @@ async def backfill(seasons: list[str], player_mode: str) -> None:
     log.info("backfill_start", players=len(players), seasons=len(seasons), total=total)
 
     async with async_session_factory() as session:
+        # Seed all 30 NBA teams first (required by FK constraints)
+        await seed_teams(session)
+        log.info("teams_seeded")
+
         # Player game logs
         for player in players:
             pid = player["id"]
@@ -70,7 +75,9 @@ async def backfill(seasons: list[str], player_mode: str) -> None:
                     continue
 
                 try:
-                    count = await ingest_player_season(session, pid, season, team_id=0)
+                    count = await ingest_player_season(
+                        session, pid, season, team_id=0, player_name=pname,
+                    )
                     completed.add(key)
                     done += 1
                     log.info(
