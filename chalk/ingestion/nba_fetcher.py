@@ -20,6 +20,7 @@ log = structlog.get_logger()
 CACHE_DIR = Path(settings.NBA_API_CACHE_DIR)
 MAX_RETRIES = 5
 BASE_DELAY = 2.0
+BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
 
 
 def _cache_path(endpoint: str, params: dict) -> Path:
@@ -82,34 +83,38 @@ async def upsert_player_game_logs(session: AsyncSession, rows: list[dict]) -> in
     if not rows:
         return 0
 
-    stmt = pg_insert(PlayerGameLog).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["game_id", "player_id"],
-        set_={
-            "team_id": stmt.excluded.team_id,
-            "game_date": stmt.excluded.game_date,
-            "season": stmt.excluded.season,
-            "min_played": stmt.excluded.min_played,
-            "pts": stmt.excluded.pts,
-            "reb": stmt.excluded.reb,
-            "ast": stmt.excluded.ast,
-            "stl": stmt.excluded.stl,
-            "blk": stmt.excluded.blk,
-            "to_committed": stmt.excluded.to_committed,
-            "fg3m": stmt.excluded.fg3m,
-            "fg3a": stmt.excluded.fg3a,
-            "fgm": stmt.excluded.fgm,
-            "fga": stmt.excluded.fga,
-            "ftm": stmt.excluded.ftm,
-            "fta": stmt.excluded.fta,
-            "plus_minus": stmt.excluded.plus_minus,
-            "starter": stmt.excluded.starter,
-            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
-        },
-    )
-    result = await session.execute(stmt)
+    total = 0
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        stmt = pg_insert(PlayerGameLog).values(batch)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["game_id", "player_id"],
+            set_={
+                "team_id": stmt.excluded.team_id,
+                "game_date": stmt.excluded.game_date,
+                "season": stmt.excluded.season,
+                "min_played": stmt.excluded.min_played,
+                "pts": stmt.excluded.pts,
+                "reb": stmt.excluded.reb,
+                "ast": stmt.excluded.ast,
+                "stl": stmt.excluded.stl,
+                "blk": stmt.excluded.blk,
+                "to_committed": stmt.excluded.to_committed,
+                "fg3m": stmt.excluded.fg3m,
+                "fg3a": stmt.excluded.fg3a,
+                "fgm": stmt.excluded.fgm,
+                "fga": stmt.excluded.fga,
+                "ftm": stmt.excluded.ftm,
+                "fta": stmt.excluded.fta,
+                "plus_minus": stmt.excluded.plus_minus,
+                "starter": stmt.excluded.starter,
+                "updated_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            },
+        )
+        result = await session.execute(stmt)
+        total += result.rowcount
     await session.commit()
-    return result.rowcount
+    return total
 
 
 async def upsert_team_game_logs(session: AsyncSession, rows: list[dict]) -> int:
@@ -117,27 +122,31 @@ async def upsert_team_game_logs(session: AsyncSession, rows: list[dict]) -> int:
     if not rows:
         return 0
 
-    stmt = pg_insert(TeamGameLog).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["game_id", "team_id"],
-        set_={
-            "game_date": stmt.excluded.game_date,
-            "season": stmt.excluded.season,
-            "pts": stmt.excluded.pts,
-            "pace": stmt.excluded.pace,
-            "off_rtg": stmt.excluded.off_rtg,
-            "def_rtg": stmt.excluded.def_rtg,
-            "ts_pct": stmt.excluded.ts_pct,
-            "ast": stmt.excluded.ast,
-            "to_committed": stmt.excluded.to_committed,
-            "oreb": stmt.excluded.oreb,
-            "dreb": stmt.excluded.dreb,
-            "fg3a_rate": stmt.excluded.fg3a_rate,
-        },
-    )
-    result = await session.execute(stmt)
+    total = 0
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        stmt = pg_insert(TeamGameLog).values(batch)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["game_id", "team_id"],
+            set_={
+                "game_date": stmt.excluded.game_date,
+                "season": stmt.excluded.season,
+                "pts": stmt.excluded.pts,
+                "pace": stmt.excluded.pace,
+                "off_rtg": stmt.excluded.off_rtg,
+                "def_rtg": stmt.excluded.def_rtg,
+                "ts_pct": stmt.excluded.ts_pct,
+                "ast": stmt.excluded.ast,
+                "to_committed": stmt.excluded.to_committed,
+                "oreb": stmt.excluded.oreb,
+                "dreb": stmt.excluded.dreb,
+                "fg3a_rate": stmt.excluded.fg3a_rate,
+            },
+        )
+        result = await session.execute(stmt)
+        total += result.rowcount
     await session.commit()
-    return result.rowcount
+    return total
 
 
 def _parse_matchup(matchup: str) -> tuple[str, str, bool]:

@@ -1,5 +1,4 @@
 """Rolling window average features for player game logs."""
-import asyncio
 from datetime import date
 
 import numpy as np
@@ -119,38 +118,27 @@ async def get_all_rolling_features(
     player_id: int,
     as_of_date: date,
 ) -> dict[str, float]:
-    """Compute all rolling features concurrently. Returns flat dict."""
-    tasks: list[tuple[str, asyncio.Task]] = []
+    """Compute all rolling features. Returns flat dict."""
+    features: dict[str, float] = {}
 
     # Basic rolling averages: stat × window
     for stat in ROLLING_STATS:
         for window in ROLLING_WINDOWS:
-            key = f"{stat}_avg_{window}g"
-            tasks.append((
-                key,
-                get_rolling_avg(session, player_id, stat, window, as_of_date),
-            ))
+            features[f"{stat}_avg_{window}g"] = await get_rolling_avg(
+                session, player_id, stat, window, as_of_date
+            )
 
     # Home/away splits for key stats (window=10)
     for stat in SPLIT_STATS:
         for loc in ("home", "away"):
-            key = f"{stat}_avg_10g_{loc}"
-            tasks.append((
-                key,
-                get_rolling_avg_split(session, player_id, stat, 10, as_of_date, loc),
-            ))
+            features[f"{stat}_avg_10g_{loc}"] = await get_rolling_avg_split(
+                session, player_id, stat, 10, as_of_date, loc
+            )
 
     # Trend slopes for key stats
     for stat in TREND_STATS:
-        key = f"{stat}_trend_{TREND_WINDOW}g"
-        tasks.append((
-            key,
-            get_stat_trend(session, player_id, stat, TREND_WINDOW, as_of_date),
-        ))
+        features[f"{stat}_trend_{TREND_WINDOW}g"] = await get_stat_trend(
+            session, player_id, stat, TREND_WINDOW, as_of_date
+        )
 
-    # Run all concurrently
-    keys = [t[0] for t in tasks]
-    coros = [t[1] for t in tasks]
-    results = await asyncio.gather(*coros)
-
-    return dict(zip(keys, results))
+    return features

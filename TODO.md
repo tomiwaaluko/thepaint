@@ -9,9 +9,9 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ## Current Status
 
-**Active Phase:** Phase 2 — Feature Engineering
-**Current Task:** Rolling window averages
-**Last Updated:** Session 3
+**Active Phase:** Phase 3 — Baseline ML Models
+**Current Task:** Training runs (Steps 1-8 code complete, running model training)
+**Last Updated:** Session 5
 
 ---
 
@@ -32,8 +32,8 @@ in TODO.md and run any relevant tests before stopping.
 | Phase | Name | Status | Phase File |
 |---|---|---|---|
 | 1 | Data Infrastructure | ✅ Complete | `.claude/phases/phase-1-data-infrastructure.md` |
-| 2 | Feature Engineering | 🔄 In Progress | `.claude/phases/phase-2-feature-engineering.md` |
-| 3 | Baseline ML Models | ⏳ Not Started | `.claude/phases/phase-3-baseline-models.md` |
+| 2 | Feature Engineering | ✅ Complete | `.claude/phases/phase-2-feature-engineering.md` |
+| 3 | Baseline ML Models | 🔄 In Progress | `.claude/phases/phase-3-baseline-models.md` |
 | 4 | Prediction API | ⏳ Not Started | `.claude/phases/phase-4-prediction-api.md` |
 | 5 | Betting & Fantasy | ⏳ Not Started | `.claude/phases/phase-5-betting-fantasy.md` |
 | 6 | Dashboard UI | ⏳ Not Started | `.claude/phases/phase-6-dashboard.md` |
@@ -59,7 +59,7 @@ in TODO.md and run any relevant tests before stopping.
 - [x] Odds API ingestion — chalk/ingestion/odds_fetcher.py
 - [x] Backfill script — scripts/backfill.py
 - [x] Ingestion tests — tests/test_ingestion/ (25 tests passing)
-- [x] Validate backfill — partial (115,885 player rows, 4720/5300 requests done, will resume later). Query perf: 0.209ms for last-30-games query (target <100ms). Team logs pending.
+- [x] Validate backfill — complete (127,171 player rows, 23,958 team rows, 11,979 games, 450 players, 30 teams). Query perf: 0.312ms for last-30-games (target <100ms). All 5300/5300 player-season requests done.
 
 **Phase 1 Done When:** `docker compose up` works, migrations run clean, backfill script populates all tables, any player's last 30 game logs queryable in < 100ms.
 
@@ -86,19 +86,19 @@ in TODO.md and run any relevant tests before stopping.
 **Phase File:** `.claude/phases/phase-3-baseline-models.md`
 **Goal:** Trained XGBoost models for pts, reb, ast, fg3m hitting MAE targets on 2023-24 holdout.
 
-- [ ] Base trainer class — the_paint/models/base.py
-- [ ] Walk-forward CV utility — the_paint/models/validation.py
-- [ ] Player stat models — the_paint/models/player.py
-- [ ] Team total model — the_paint/models/team.py
-- [ ] MLflow experiment setup — the_paint/models/registry.py
-- [ ] Quantile models for pts, reb, ast — the_paint/models/quantile.py
-- [ ] Full training script — scripts/train_all.py
-- [ ] Model tests — tests/test_models/
-- [ ] Training run: pts model ≤ 5.0 MAE
-- [ ] Training run: reb model ≤ 2.5 MAE
-- [ ] Training run: ast model ≤ 2.0 MAE
-- [ ] Training run: fg3m model ≤ 1.2 MAE
-- [ ] Training run: team total model ≤ 8.0 MAE
+- [x] Base trainer class — chalk/models/base.py
+- [x] Walk-forward CV utility — chalk/models/validation.py
+- [x] Player stat models — chalk/models/player.py
+- [x] Team total model — chalk/models/team.py
+- [x] MLflow experiment setup — chalk/models/registry.py
+- [x] Quantile models for pts, reb, ast — chalk/models/quantile.py
+- [x] Full training script — scripts/train_all.py
+- [x] Model tests — tests/test_models/ (17 tests passing)
+- [x] Training run: pts model ≤ 5.0 MAE — achieved 4.94 test MAE
+- [x] Training run: reb model ≤ 2.5 MAE — achieved 2.02 test MAE
+- [x] Training run: ast model ≤ 2.0 MAE — achieved 1.47 test MAE
+- [x] Training run: fg3m model ≤ 1.2 MAE — achieved 0.94 test MAE
+- [ ] Training run: team total model ≤ 8.0 MAE — at 15.4 MAE, needs external data (Vegas lines, injuries)
 
 **Phase 3 Done When:** All 5 models registered in MLflow, MAE targets met on 2023-24 test set, feature importance top 10 reviewed and makes basketball sense.
 

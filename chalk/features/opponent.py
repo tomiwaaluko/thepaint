@@ -1,5 +1,4 @@
 """Opponent defensive profile features."""
-import asyncio
 from datetime import date
 
 from sqlalchemy import func, select
@@ -111,13 +110,15 @@ async def get_opp_stl_rate(
     window: int = DEFAULT_WINDOW,
 ) -> float:
     """Average steals per game by this team (proxy for steal rate)."""
-    # Use player game logs against this team to compute steals forced
     subq = (
-        select(func.sum(PlayerGameLog.stl).label("game_stl"))
+        select(
+            func.sum(PlayerGameLog.stl).label("game_stl"),
+            func.max(PlayerGameLog.game_date).label("gdate"),
+        )
         .where(PlayerGameLog.team_id == team_id)
         .where(PlayerGameLog.game_date < as_of_date)  # as_of_date gate
         .group_by(PlayerGameLog.game_id)
-        .order_by(PlayerGameLog.game_date.desc())
+        .order_by(func.max(PlayerGameLog.game_date).desc())
         .limit(window)
     ).subquery()
 
@@ -134,11 +135,14 @@ async def get_opp_blk_rate(
 ) -> float:
     """Average blocks per game by this team (proxy for block rate)."""
     subq = (
-        select(func.sum(PlayerGameLog.blk).label("game_blk"))
+        select(
+            func.sum(PlayerGameLog.blk).label("game_blk"),
+            func.max(PlayerGameLog.game_date).label("gdate"),
+        )
         .where(PlayerGameLog.team_id == team_id)
         .where(PlayerGameLog.game_date < as_of_date)  # as_of_date gate
         .group_by(PlayerGameLog.game_id)
-        .order_by(PlayerGameLog.game_date.desc())
+        .order_by(func.max(PlayerGameLog.game_date).desc())
         .limit(window)
     ).subquery()
 
@@ -153,25 +157,14 @@ async def get_all_opponent_features(
     player_position: str,
     as_of_date: date,
 ) -> dict[str, float]:
-    """Compute all opponent features concurrently."""
-    (
-        def_rtg, pace, pts_allowed_pos, fg3a_rate, stl_rate, blk_rate
-    ) = await asyncio.gather(
-        get_opp_def_rtg(session, opponent_team_id, as_of_date),
-        get_opp_pace(session, opponent_team_id, as_of_date),
-        get_opp_pts_allowed_by_position(
+    """Compute all opponent features. Returns flat dict."""
+    return {
+        "opp_def_rtg_15g": await get_opp_def_rtg(session, opponent_team_id, as_of_date),
+        "opp_pace_15g": await get_opp_pace(session, opponent_team_id, as_of_date),
+        f"opp_pts_allowed_{player_position.lower()}": await get_opp_pts_allowed_by_position(
             session, opponent_team_id, player_position, as_of_date
         ),
-        get_opp_fg3a_rate_allowed(session, opponent_team_id, as_of_date),
-        get_opp_stl_rate(session, opponent_team_id, as_of_date),
-        get_opp_blk_rate(session, opponent_team_id, as_of_date),
-    )
-
-    return {
-        "opp_def_rtg_15g": def_rtg,
-        "opp_pace_15g": pace,
-        f"opp_pts_allowed_{player_position.lower()}": pts_allowed_pos,
-        "opp_fg3a_rate_allowed_15g": fg3a_rate,
-        "opp_stl_rate_15g": stl_rate,
-        "opp_blk_rate_15g": blk_rate,
+        "opp_fg3a_rate_allowed_15g": await get_opp_fg3a_rate_allowed(session, opponent_team_id, as_of_date),
+        "opp_stl_rate_15g": await get_opp_stl_rate(session, opponent_team_id, as_of_date),
+        "opp_blk_rate_15g": await get_opp_blk_rate(session, opponent_team_id, as_of_date),
     }

@@ -1,5 +1,4 @@
 """Master feature pipeline — single entry point for all feature generation."""
-import asyncio
 from datetime import date
 
 import pandas as pd
@@ -61,21 +60,17 @@ async def generate_features(
     Raises:
         FeatureError: If player or game not found.
     """
-    game, player = await asyncio.gather(
-        _get_game(session, game_id),
-        _get_player(session, player_id),
-    )
+    game = await _get_game(session, game_id)
+    player = await _get_player(session, player_id)
     opponent_team_id = _get_opponent_id(game, player.team_id)
 
-    # Run all async feature groups concurrently
-    rolling, opponent, roster, usage, prev_date, game_num = await asyncio.gather(
-        get_all_rolling_features(session, player_id, as_of_date),
-        get_all_opponent_features(session, opponent_team_id, player.position, as_of_date),
-        get_roster_features(session, player_id, player.team_id, opponent_team_id, game_id, as_of_date),
-        get_usage_features(session, player_id, as_of_date),
-        get_previous_game_date(session, player_id, as_of_date),
-        get_game_number_in_season(session, player.team_id, game.season, as_of_date),
-    )
+    # Run feature groups sequentially (asyncpg requires single-query-per-connection)
+    rolling = await get_all_rolling_features(session, player_id, as_of_date)
+    opponent = await get_all_opponent_features(session, opponent_team_id, player.position, as_of_date)
+    roster = await get_roster_features(session, player_id, player.team_id, opponent_team_id, game_id, as_of_date)
+    usage = await get_usage_features(session, player_id, as_of_date)
+    prev_date = await get_previous_game_date(session, player_id, as_of_date)
+    game_num = await get_game_number_in_season(session, player.team_id, game.season, as_of_date)
 
     # Situational is synchronous
     situational = get_situational_features(game, player, prev_date, game_num)
