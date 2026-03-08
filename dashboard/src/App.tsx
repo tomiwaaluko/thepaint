@@ -22,7 +22,8 @@ function App() {
 }
 
 // Hardcoded game IDs for demo — in production, would come from a /v1/games/today endpoint
-const DEMO_GAME_IDS = ["0022301192", "0022301190", "0022301189"];
+// 2025-26 season games from March 7, 2026
+const DEMO_GAME_IDS = ["0022500916", "0022500918", "0022500919"];
 
 function Dashboard() {
   const [games, setGames] = useState<GameSlate[]>([]);
