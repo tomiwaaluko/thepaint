@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -12,6 +13,18 @@ config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Prefer DATABASE_URL from environment, then chalk settings (which reads .env),
+# then fall back to alembic.ini — so migrations work against any target DB.
+_db_url = os.environ.get("DATABASE_URL")
+if not _db_url:
+    try:
+        from chalk.config import settings
+        _db_url = settings.DATABASE_URL
+    except Exception:
+        pass
+if _db_url:
+    config.set_main_option("sqlalchemy.url", _db_url)
 
 target_metadata = Base.metadata
 
