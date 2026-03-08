@@ -9,8 +9,8 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ## Current Status
 
-**Active Phase:** Phase 4 — Prediction API
-**Current Task:** Phase 5 complete — ready for Phase 6 (Dashboard UI)
+**Active Phase:** Phase 7 — Automation & Monitoring
+**Current Task:** Phase 6 complete — ready for Phase 7
 **Last Updated:** Session 6
 
 ---
@@ -36,7 +36,7 @@ in TODO.md and run any relevant tests before stopping.
 | 3 | Baseline ML Models | ✅ Complete (4/5 targets met) | `.claude/phases/phase-3-baseline-models.md` |
 | 4 | Prediction API | ✅ Complete | `.claude/phases/phase-4-prediction-api.md` |
 | 5 | Betting & Fantasy | ✅ Complete | `.claude/phases/phase-5-betting-fantasy.md` |
-| 6 | Dashboard UI | ⏳ Not Started | `.claude/phases/phase-6-dashboard.md` |
+| 6 | Dashboard UI | ✅ Complete | `.claude/phases/phase-6-dashboard.md` |
 | 7 | Automation & Monitoring | ⏳ Not Started | `.claude/phases/phase-7-automation.md` |
 | 8 | Ensemble & Tuning | ⏳ Not Started | `.claude/phases/phase-8-ensemble-tuning.md` |
 
@@ -149,16 +149,21 @@ in TODO.md and run any relevant tests before stopping.
 **Phase File:** `.claude/phases/phase-6-dashboard.md`
 **Goal:** React dashboard showing today's slate, predictions, O/U comparison, fantasy value plays.
 
-- [ ] React app scaffold — dashboard/
-- [ ] Today's games view
-- [ ] Player prediction card component
-- [ ] Stat distribution chart (p10–p90 range bar)
-- [ ] O/U line comparison view
-- [ ] Fantasy value rankings table
-- [ ] Injury context indicators
-- [ ] Auto-refresh on injury updates
+- [x] React app scaffold — dashboard/ (Vite + React 18 + TypeScript + Tailwind v4)
+- [x] TypeScript API types — dashboard/src/types/chalk.ts
+- [x] API client — dashboard/src/api/chalk.ts (typed fetch wrapper)
+- [x] React Query hooks — usePlayerPrediction, useGameSlate, useFantasyBoard
+- [x] Today's games view — SlateView/GameCard + GameDetailView (3-tab: Players/Props/Fantasy)
+- [x] Player prediction card — PlayerCard with stat distributions + fantasy scores
+- [x] Stat distribution chart — p10-p90 range bar with IQR highlight + median marker + Vegas line
+- [x] O/U line comparison view — PropsBoard with edge sorting, stat/confidence filters, star badges
+- [x] Fantasy value rankings table — FantasyBoard with sortable columns, boom/bust rates, value filter
+- [x] Injury context indicators — InjuryBadge (Active/Questionable/Out) + absent teammate alert
+- [x] Auto-refresh on injury updates — React Query refetchInterval (3-10 min per data type)
+- [x] Build passes — 0 TypeScript errors, 245KB production bundle
 
 **Phase 6 Done When:** Dashboard loads today's full slate, shows predictions with confidence bands, highlights high-edge plays, updates when injury status changes.
+**Phase 6 Result:** All tasks complete. Dark navy + orange theme. npm run dev serves at localhost:5173 with API proxy to localhost:8000. npm run build produces clean production bundle.
 
 ---
 
