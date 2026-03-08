@@ -1,0 +1,10 @@
+INFO:     Started server process [28332]
+INFO:     Waiting for application startup.
+2026-03-08 03:49:33 [info     ] model_loaded                   stat=pts
+2026-03-08 03:49:33 [info     ] model_loaded                   stat=reb
+2026-03-08 03:49:33 [info     ] model_loaded                   stat=ast
+2026-03-08 03:49:33 [info     ] model_loaded                   stat=fg3m
+2026-03-08 03:49:33 [info     ] models_warmup_complete
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58935 - "GET /v1/health HTTP/1.1" 200 OK
