@@ -45,12 +45,14 @@ const StatPill = ({ prefix = "", num, suffix, label, isFloat = false }: {
 
 const PlayerCard = ({
   player,
+  team,
   stat,
   label,
   image,
   className,
 }: {
   player: string;
+  team: string;
   stat: string;
   label: string;
   image: string;
@@ -68,7 +70,7 @@ const PlayerCard = ({
       </div>
       <h3 className="text-xl font-bold text-white">{player}</h3>
       <p className="text-[#94A3B8] text-xs uppercase tracking-widest mt-1">
-        {player.split(' ')[1]?.substring(0, 3) || 'NBA'}
+        {team}
       </p>
     </div>
 
@@ -165,6 +167,7 @@ export default function LandingPage() {
             {/* Card 3 (Back) */}
             <PlayerCard
               player="Tyrese Haliburton"
+              team="IND"
               stat="9.8"
               label="Assists"
               image="https://cdn.nba.com/headshots/nba/latest/1040x760/1630169.png"
@@ -173,6 +176,7 @@ export default function LandingPage() {
             {/* Card 2 (Middle) */}
             <PlayerCard
               player="Nikola Jokic"
+              team="DEN"
               stat="11.2"
               label="Rebounds"
               image="https://cdn.nba.com/headshots/nba/latest/1040x760/203999.png"
@@ -181,6 +185,7 @@ export default function LandingPage() {
             {/* Card 1 (Front) */}
             <PlayerCard
               player="Jayson Tatum"
+              team="BOS"
               stat="24.5"
               label="Points"
               image="https://cdn.nba.com/headshots/nba/latest/1040x760/1628369.png"
