@@ -36,7 +36,7 @@ async def upsert_betting_lines(session: AsyncSession, rows: list[dict]) -> int:
 
     stmt = pg_insert(BettingLine).values(rows)
     stmt = stmt.on_conflict_do_update(
-        index_elements=["game_id", "market"],
+        index_elements=["game_id", "market", "sportsbook"],
         set_={
             "line": stmt.excluded.line,
             "over_odds": stmt.excluded.over_odds,

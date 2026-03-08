@@ -132,7 +132,7 @@ class TeamGameLog(Base):
 
 class Injury(Base):
     __tablename__ = "injuries"
-    __table_args__ = (Index("ix_injury_player_date", "player_id", "report_date"),)
+    __table_args__ = (UniqueConstraint("player_id", "report_date", name="uq_injury_player_date"),)
 
     injury_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     player_id: Mapped[int] = mapped_column(ForeignKey("players.player_id"), nullable=False)
@@ -148,10 +148,10 @@ class Injury(Base):
 
 class BettingLine(Base):
     __tablename__ = "betting_lines"
-    __table_args__ = (Index("ix_betting_game_market", "game_id", "market"),)
+    __table_args__ = (UniqueConstraint("game_id", "market", "sportsbook", name="uq_betting_game_market_book"),)
 
     line_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    game_id: Mapped[str] = mapped_column(ForeignKey("games.game_id"), nullable=False)
+    game_id: Mapped[str] = mapped_column(String(100), nullable=False)
     player_id: Mapped[int | None] = mapped_column(ForeignKey("players.player_id"))
     sportsbook: Mapped[str] = mapped_column(String(50), nullable=False)
     market: Mapped[str] = mapped_column(String(50), nullable=False)
