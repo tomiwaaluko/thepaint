@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"
     LOG_LEVEL: str = "INFO"
     NBA_API_CACHE_DIR: Path = Path(".cache/nba_api")
+    # Comma-separated list of allowed CORS origins.
+    # Set to "*" or a specific Railway/Vercel frontend URL in production.
+    ALLOWED_ORIGINS: str = "*"
 
     model_config = {"env_file": ".env"}
 

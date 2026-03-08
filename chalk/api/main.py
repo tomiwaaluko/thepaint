@@ -3,9 +3,11 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from chalk.api.routes import fantasy, games, health, players, props, teams
+from chalk.config import settings
 from chalk.exceptions import FeatureError, IngestError, PredictionError
 
 log = structlog.get_logger()
@@ -31,6 +33,16 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     lifespan=lifespan,
+)
+
+# CORS — origins controlled by ALLOWED_ORIGINS env var (comma-separated or "*")
+_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",")]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 # Include routers
