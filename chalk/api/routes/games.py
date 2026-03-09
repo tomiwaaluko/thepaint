@@ -108,6 +108,16 @@ async def get_today_games(
     return response
 
 
+@router.delete("/{game_id}/cache")
+async def clear_game_cache(
+    game_id: str,
+    redis: aioredis.Redis = Depends(get_redis),
+) -> dict:
+    """Clear cached prediction for a game."""
+    deleted = await redis.delete(f"pred:game:{game_id}")
+    return {"game_id": game_id, "cleared": deleted > 0}
+
+
 @router.get("/{game_id}/predict", response_model=GamePredictionResponse)
 async def predict_game(
     game_id: str,
@@ -117,7 +127,9 @@ async def predict_game(
     redis: aioredis.Redis = Depends(get_redis),
 ) -> GamePredictionResponse:
     cache_key = f"pred:game:{game_id}"
-    if not nocache:
+    if nocache:
+        await redis.delete(cache_key)
+    else:
         cached = await get_cached(redis, cache_key, GamePredictionResponse)
         if cached:
             return cached
