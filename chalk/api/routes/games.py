@@ -112,13 +112,15 @@ async def get_today_games(
 async def predict_game(
     game_id: str,
     as_of: datetime | None = Query(None, description="Prediction as-of datetime"),
+    nocache: bool = Query(False, description="Skip cache lookup"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> GamePredictionResponse:
     cache_key = f"pred:game:{game_id}"
-    cached = await get_cached(redis, cache_key, GamePredictionResponse)
-    if cached:
-        return cached
+    if not nocache:
+        cached = await get_cached(redis, cache_key, GamePredictionResponse)
+        if cached:
+            return cached
 
     # Load game
     result = await session.execute(select(Game).where(Game.game_id == game_id))
@@ -151,8 +153,10 @@ async def predict_game(
     # Fallback for upcoming games: use each team's top rotation from recent logs
     if not home_player_ids:
         home_player_ids = await _get_recent_roster(session, game.home_team_id, as_of_date)
+        log.info("roster_fallback_home", team_id=game.home_team_id, count=len(home_player_ids))
     if not away_player_ids:
         away_player_ids = await _get_recent_roster(session, game.away_team_id, as_of_date)
+        log.info("roster_fallback_away", team_id=game.away_team_id, count=len(away_player_ids))
 
     # Predict each player (sequentially to avoid session conflicts with async sqlite)
     home_predictions = await _predict_players(session, home_player_ids, game_id, as_of_date)
