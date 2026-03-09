@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import redis.asyncio as aioredis
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.api.cache import get_cached, set_cached
@@ -60,7 +60,19 @@ async def get_today_games(
     elif today_games:
         games, target_date = today_games, today
     else:
-        games, target_date = [], today
+        # Fallback: show the most recent date that has games in the DB
+        latest_date_result = await session.execute(
+            select(func.max(Game.date))
+        )
+        latest_date = latest_date_result.scalar()
+        if latest_date:
+            result = await session.execute(
+                select(Game).where(Game.date == latest_date).order_by(Game.game_id)
+            )
+            games = result.scalars().all()
+            target_date = latest_date
+        else:
+            games, target_date = [], today
 
     summaries: list[GameSummary] = []
     for g in games:

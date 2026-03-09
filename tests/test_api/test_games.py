@@ -9,15 +9,6 @@ from chalk.api.dependencies import get_db, get_redis
 from chalk.api.main import app
 
 
-def _make_db_returning(games):
-    """Return a mock session whose execute always returns the given game list."""
-    session = AsyncMock()
-    result_mock = MagicMock()
-    result_mock.scalars.return_value.all.return_value = games
-    session.execute = AsyncMock(return_value=result_mock)
-    return session
-
-
 def _make_redis():
     """Return a mock Redis that has no cached data."""
     r = AsyncMock()
@@ -27,9 +18,27 @@ def _make_redis():
     return r
 
 
+def _make_empty_result():
+    """Mock result where scalars().all() returns [] and scalar() returns None."""
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    result.scalar.return_value = None
+    return result
+
+
+def _make_games_result(games):
+    """Mock result where scalars().all() returns the given games."""
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = games
+    result.scalar.return_value = None
+    return result
+
+
 @pytest.mark.asyncio
 async def test_today_games_returns_empty_list_when_no_games():
-    db = _make_db_returning([])
+    db = AsyncMock()
+    # All 3 queries (today, tomorrow, max date) return empty/None
+    db.execute = AsyncMock(return_value=_make_empty_result())
     redis = _make_redis()
 
     async def fake_db():
@@ -68,7 +77,8 @@ async def test_today_games_returns_game_list():
     mock_away = MagicMock()
     mock_away.abbreviation = "LAL"
 
-    db = _make_db_returning([mock_game])
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_make_games_result([mock_game]))
     db.get = AsyncMock(
         side_effect=lambda model, tid: mock_home if tid == 1 else mock_away
     )
@@ -101,7 +111,8 @@ async def test_today_games_returns_game_list():
 
 @pytest.mark.asyncio
 async def test_today_games_response_schema():
-    db = _make_db_returning([])
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_make_empty_result())
     redis = _make_redis()
 
     async def fake_db():
@@ -117,10 +128,63 @@ async def test_today_games_response_schema():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/v1/games/today")
         data = resp.json()
-        # Verify response matches TodayGamesResponse schema
         assert "date" in data
         assert "games" in data
-        # date should be a valid ISO date string
         date.fromisoformat(data["date"])
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_today_games_fallback_to_latest():
+    """When no games today/tomorrow, falls back to latest date in DB."""
+    latest = date(2026, 3, 7)
+
+    mock_game = MagicMock()
+    mock_game.game_id = "0022500916"
+    mock_game.date = latest
+    mock_game.home_team_id = 10
+    mock_game.away_team_id = 20
+    mock_game.status = "Final"
+
+    mock_home = MagicMock()
+    mock_home.abbreviation = "MIA"
+    mock_away = MagicMock()
+    mock_away.abbreviation = "NYK"
+
+    # Build distinct results for each query
+    empty = _make_empty_result()
+    max_date_result = MagicMock()
+    max_date_result.scalars.return_value.all.return_value = []
+    max_date_result.scalar.return_value = latest
+    fallback_result = _make_games_result([mock_game])
+
+    db = AsyncMock()
+    # Calls: 1=today games, 2=tomorrow games, 3=max(date), 4=games for latest date
+    db.execute = AsyncMock(side_effect=[empty, empty, max_date_result, fallback_result])
+    db.get = AsyncMock(
+        side_effect=lambda model, tid: mock_home if tid == 10 else mock_away
+    )
+
+    redis = _make_redis()
+
+    async def fake_db():
+        yield db
+
+    async def fake_redis():
+        yield redis
+
+    app.dependency_overrides[get_db] = fake_db
+    app.dependency_overrides[get_redis] = fake_redis
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/v1/games/today")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["date"] == "2026-03-07"
+        assert len(data["games"]) == 1
+        assert data["games"][0]["game_id"] == "0022500916"
+        assert data["games"][0]["home_team"] == "MIA"
     finally:
         app.dependency_overrides.clear()
