@@ -19,6 +19,7 @@ from chalk.api.schemas import (
 )
 from chalk.db.models import Game, Player, PlayerGameLog, Team
 from chalk.exceptions import PredictionError
+from chalk.ingestion.nba_fetcher import ingest_today_scoreboard
 from chalk.predictions.player import predict_player
 
 log = structlog.get_logger()
@@ -47,6 +48,18 @@ async def get_today_games(
         select(Game).where(Game.date == today).order_by(Game.game_id)
     )
     today_games = result.scalars().all()
+
+    # If no games for today in DB, try fetching from NBA API
+    if not today_games:
+        try:
+            count = await ingest_today_scoreboard(session, today)
+            if count > 0:
+                result = await session.execute(
+                    select(Game).where(Game.date == today).order_by(Game.game_id)
+                )
+                today_games = result.scalars().all()
+        except Exception as e:
+            log.warning("auto_ingest_today_failed", error=str(e))
 
     result = await session.execute(
         select(Game).where(Game.date == tomorrow).order_by(Game.game_id)

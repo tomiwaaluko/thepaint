@@ -1,12 +1,14 @@
 """Tests for the /v1/games/today endpoint."""
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from chalk.api.dependencies import get_db, get_redis
 from chalk.api.main import app
+
+INGEST_PATCH = "chalk.api.routes.games.ingest_today_scoreboard"
 
 
 def _make_redis():
@@ -35,9 +37,9 @@ def _make_games_result(games):
 
 
 @pytest.mark.asyncio
-async def test_today_games_returns_empty_list_when_no_games():
+@patch(INGEST_PATCH, new_callable=AsyncMock, return_value=0)
+async def test_today_games_returns_empty_list_when_no_games(mock_ingest):
     db = AsyncMock()
-    # All 3 queries (today, tomorrow, max date) return empty/None
     db.execute = AsyncMock(return_value=_make_empty_result())
     redis = _make_redis()
 
@@ -110,7 +112,8 @@ async def test_today_games_returns_game_list():
 
 
 @pytest.mark.asyncio
-async def test_today_games_response_schema():
+@patch(INGEST_PATCH, new_callable=AsyncMock, return_value=0)
+async def test_today_games_response_schema(mock_ingest):
     db = AsyncMock()
     db.execute = AsyncMock(return_value=_make_empty_result())
     redis = _make_redis()
@@ -136,7 +139,8 @@ async def test_today_games_response_schema():
 
 
 @pytest.mark.asyncio
-async def test_today_games_fallback_to_latest():
+@patch(INGEST_PATCH, new_callable=AsyncMock, return_value=0)
+async def test_today_games_fallback_to_latest(mock_ingest):
     """When no games today/tomorrow, falls back to latest date in DB."""
     latest = date(2026, 3, 7)
 
@@ -152,7 +156,6 @@ async def test_today_games_fallback_to_latest():
     mock_away = MagicMock()
     mock_away.abbreviation = "NYK"
 
-    # Build distinct results for each query
     empty = _make_empty_result()
     max_date_result = MagicMock()
     max_date_result.scalars.return_value.all.return_value = []
@@ -160,7 +163,7 @@ async def test_today_games_fallback_to_latest():
     fallback_result = _make_games_result([mock_game])
 
     db = AsyncMock()
-    # Calls: 1=today games, 2=tomorrow games, 3=max(date), 4=games for latest date
+    # Calls: 1=today, 2=tomorrow, 3=max(date), 4=games for latest date
     db.execute = AsyncMock(side_effect=[empty, empty, max_date_result, fallback_result])
     db.get = AsyncMock(
         side_effect=lambda model, tid: mock_home if tid == 10 else mock_away
@@ -186,5 +189,54 @@ async def test_today_games_fallback_to_latest():
         assert len(data["games"]) == 1
         assert data["games"][0]["game_id"] == "0022500916"
         assert data["games"][0]["home_team"] == "MIA"
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_today_games_auto_ingest_fallback():
+    """When no games in DB, auto-ingest from NBA API fetches them."""
+    mock_game = MagicMock()
+    mock_game.game_id = "0022500921"
+    mock_game.date = date.today()
+    mock_game.home_team_id = 1
+    mock_game.away_team_id = 2
+    mock_game.status = "scheduled"
+
+    mock_home = MagicMock()
+    mock_home.abbreviation = "CLE"
+    mock_away = MagicMock()
+    mock_away.abbreviation = "BOS"
+
+    empty = _make_empty_result()
+    after_ingest = _make_games_result([mock_game])
+    tomorrow_empty = _make_empty_result()
+
+    db = AsyncMock()
+    # 1=today (empty), 2=today after ingest (has game), 3=tomorrow (empty)
+    db.execute = AsyncMock(side_effect=[empty, after_ingest, tomorrow_empty])
+    db.get = AsyncMock(
+        side_effect=lambda model, tid: mock_home if tid == 1 else mock_away
+    )
+
+    redis = _make_redis()
+
+    async def fake_db():
+        yield db
+
+    async def fake_redis():
+        yield redis
+
+    app.dependency_overrides[get_db] = fake_db
+    app.dependency_overrides[get_redis] = fake_redis
+    try:
+        with patch(INGEST_PATCH, new_callable=AsyncMock, return_value=1):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/v1/games/today")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["games"]) == 1
+        assert data["games"][0]["game_id"] == "0022500921"
     finally:
         app.dependency_overrides.clear()

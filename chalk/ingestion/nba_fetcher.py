@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import structlog
-from nba_api.stats.endpoints import leaguegamelog, playergamelog
+from nba_api.stats.endpoints import leaguegamelog, playergamelog, scoreboardv2
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,6 +61,58 @@ async def _fetch_with_backoff(endpoint_cls, params: dict, endpoint_name: str) ->
 
     # Unreachable, but satisfies type checkers
     raise IngestError(f"Permanent failure: {endpoint_name}")  # pragma: no cover
+
+
+def _season_from_date(d: date) -> str:
+    """Derive NBA season string from a date. NBA season starts in October."""
+    year = d.year if d.month >= 10 else d.year - 1
+    return f"{year}-{str(year + 1)[-2:]}"
+
+
+async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int:
+    """Fetch games from NBA ScoreboardV2 for the given date and upsert into games table.
+
+    This is used as a fallback when today's games haven't been ingested yet by the
+    daily Airflow DAG. It creates game records so the dashboard can show the slate.
+    """
+    date_str = game_date.strftime("%m/%d/%Y")
+    loop = asyncio.get_event_loop()
+
+    try:
+        board = await loop.run_in_executor(
+            None, lambda: scoreboardv2.ScoreboardV2(game_date=date_str)
+        )
+        data = board.get_normalized_dict()
+    except Exception as e:
+        log.warning("scoreboard_fetch_failed", date=date_str, error=str(e))
+        return 0
+
+    headers = data.get("GameHeader", [])
+    if not headers:
+        return 0
+
+    season = _season_from_date(game_date)
+    game_rows: list[dict] = []
+    seen: set[str] = set()
+    for g in headers:
+        gid = g["GAME_ID"]
+        if gid in seen:
+            continue
+        seen.add(gid)
+        game_rows.append({
+            "game_id": gid,
+            "date": game_date,
+            "season": season,
+            "home_team_id": g["HOME_TEAM_ID"],
+            "away_team_id": g["VISITOR_TEAM_ID"],
+        })
+
+    if game_rows:
+        await upsert_games(session, game_rows)
+        await session.commit()
+        log.info("scoreboard_ingested", date=date_str, games=len(game_rows))
+
+    return len(game_rows)
 
 
 def _parse_minutes(min_val: str | int | float | None) -> float:
