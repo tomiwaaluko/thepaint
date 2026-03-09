@@ -1,5 +1,5 @@
 """Pydantic request/response schemas for the Chalk prediction API."""
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -80,6 +80,21 @@ class OverUnderResponse(BaseModel):
     implied_over_prob: float
     edge: float
     confidence: str
+
+
+class GameSummary(BaseModel):
+    game_id: str
+    date: date
+    home_team_id: int
+    away_team_id: int
+    home_team: str
+    away_team: str
+    status: str
+
+
+class TodayGamesResponse(BaseModel):
+    date: date
+    games: list[GameSummary]
 
 
 class HealthResponse(BaseModel):

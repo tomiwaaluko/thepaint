@@ -18,7 +18,7 @@ export function GameDetailView({ game, props, fantasyProjections }: GameDetailVi
   return (
     <div>
       {/* Game header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-1">
         <h2 className="text-lg font-bold text-neutral-200">
           {game.away_team} @ {game.home_team}
         </h2>
@@ -30,13 +30,13 @@ export function GameDetailView({ game, props, fantasyProjections }: GameDetailVi
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-4 border-b border-navy-600">
+      {/* Tab bar — full width on mobile */}
+      <div className="flex gap-1 mb-4 border-b border-navy-600 overflow-x-auto">
         {(["players", "props", "fantasy"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer capitalize ${
+            className={`px-3 md:px-4 py-2 text-sm font-medium transition-colors cursor-pointer capitalize whitespace-nowrap ${
               tab === t
                 ? "text-chalk-orange border-b-2 border-chalk-orange"
                 : "text-neutral-400 hover:text-neutral-200"

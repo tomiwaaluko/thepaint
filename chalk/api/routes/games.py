@@ -1,6 +1,7 @@
 """Game prediction routes."""
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import redis.asyncio as aioredis
 import structlog
@@ -10,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.api.cache import get_cached, set_cached
 from chalk.api.dependencies import get_db, get_redis
-from chalk.api.schemas import GamePredictionResponse, PlayerPredictionResponse
+from chalk.api.schemas import (
+    GamePredictionResponse,
+    GameSummary,
+    PlayerPredictionResponse,
+    TodayGamesResponse,
+)
 from chalk.db.models import Game, Player, PlayerGameLog, Team
 from chalk.exceptions import PredictionError
 from chalk.predictions.player import predict_player
@@ -18,6 +24,63 @@ from chalk.predictions.player import predict_player
 log = structlog.get_logger()
 
 router = APIRouter(prefix="/v1/games", tags=["games"])
+
+ET_TZ = ZoneInfo("America/New_York")
+
+
+@router.get("/today", response_model=TodayGamesResponse)
+async def get_today_games(
+    session: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+) -> TodayGamesResponse:
+    """Return today's games (or tomorrow's if none today or after 11 PM ET)."""
+    now_et = datetime.now(ET_TZ)
+    today = now_et.date()
+    tomorrow = today + timedelta(days=1)
+
+    cache_key = f"games:today:{today}:{now_et.hour >= 23}"
+    cached = await get_cached(redis, cache_key, TodayGamesResponse)
+    if cached:
+        return cached
+
+    result = await session.execute(
+        select(Game).where(Game.date == today).order_by(Game.game_id)
+    )
+    today_games = result.scalars().all()
+
+    result = await session.execute(
+        select(Game).where(Game.date == tomorrow).order_by(Game.game_id)
+    )
+    tomorrow_games = result.scalars().all()
+
+    if today_games and now_et.hour < 23:
+        games, target_date = today_games, today
+    elif tomorrow_games:
+        games, target_date = tomorrow_games, tomorrow
+    elif today_games:
+        games, target_date = today_games, today
+    else:
+        games, target_date = [], today
+
+    summaries: list[GameSummary] = []
+    for g in games:
+        home_team = await session.get(Team, g.home_team_id)
+        away_team = await session.get(Team, g.away_team_id)
+        summaries.append(
+            GameSummary(
+                game_id=g.game_id,
+                date=g.date,
+                home_team_id=g.home_team_id,
+                away_team_id=g.away_team_id,
+                home_team=home_team.abbreviation if home_team else "UNK",
+                away_team=away_team.abbreviation if away_team else "UNK",
+                status=g.status,
+            )
+        )
+
+    response = TodayGamesResponse(date=target_date, games=summaries)
+    await set_cached(redis, cache_key, response, ttl=300)
+    return response
 
 
 @router.get("/{game_id}/predict", response_model=GamePredictionResponse)

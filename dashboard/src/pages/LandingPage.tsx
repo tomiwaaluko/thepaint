@@ -128,7 +128,7 @@ export default function LandingPage() {
               <span className="text-xs font-bold tracking-widest text-[#94A3B8]">NBA PREDICTIONS</span>
             </div>
 
-            <h1 className="text-5xl lg:text-[64px] font-bold leading-[1.1] tracking-tight mb-6">
+            <h1 className="text-4xl sm:text-5xl lg:text-[64px] font-bold leading-[1.1] tracking-tight mb-6">
               Stop Guessing.<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#E8531A] to-[#ff7a45]">Start Chalking.</span>
             </h1>
@@ -162,7 +162,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className="relative h-[600px] w-full flex items-center justify-center group perspective-[2000px]"
+            className="relative h-[600px] w-full hidden lg:flex items-center justify-center group perspective-[2000px]"
           >
             {/* Card 3 (Back) */}
             <PlayerCard
@@ -196,9 +196,9 @@ export default function LandingPage() {
       </section>
 
       {/* Social Proof Bar */}
-      <div className="w-full bg-[#0B101A] border-y border-[#2D3F55]/50 py-4 overflow-hidden">
+      <div className="w-full bg-[#0B101A] border-y border-[#2D3F55]/50 py-4 overflow-x-auto">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-center text-sm font-medium text-[#94A3B8] tracking-wide">
-          <div className="flex items-center gap-6 whitespace-nowrap">
+          <div className="flex items-center gap-4 md:gap-6 whitespace-nowrap">
             <span>527 players tracked</span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#2D3F55]" />
             <span>12,927 games analyzed</span>
@@ -348,7 +348,7 @@ export default function LandingPage() {
       {/* CTA Footer Banner */}
       <footer className="bg-[#0B101A] border-t border-[#2D3F55] pt-24 pb-12">
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">Tonight&apos;s slate is loading.</h2>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6">Tonight&apos;s slate is loading.</h2>
           <p className="text-xl text-[#94A3B8] mb-10">
             Get projections for every player in tonight&apos;s games — free.
           </p>

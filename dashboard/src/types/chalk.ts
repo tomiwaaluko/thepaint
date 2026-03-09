@@ -69,6 +69,21 @@ export interface GameSlate {
   away_predictions: PlayerPrediction[];
 }
 
+export interface GameSummary {
+  game_id: string;
+  date: string;
+  home_team_id: number;
+  away_team_id: number;
+  home_team: string;
+  away_team: string;
+  status: string;
+}
+
+export interface TodayGamesResponse {
+  date: string;
+  games: GameSummary[];
+}
+
 export interface HealthResponse {
   status: "ok" | "degraded";
   checks: Record<string, string>;

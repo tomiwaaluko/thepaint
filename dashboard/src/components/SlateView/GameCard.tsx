@@ -2,8 +2,8 @@ interface GameCardProps {
   gameId: string;
   homeTeam: string;
   awayTeam: string;
-  predictedTotal: number;
-  playerCount: number;
+  predictedTotal?: number;
+  playerCount?: number;
   selected: boolean;
   onClick: () => void;
 }
@@ -25,22 +25,26 @@ export function GameCard({
           : "bg-navy-800 border-navy-600 hover:border-neutral-400"
       }`}
     >
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="whitespace-nowrap">
           <span className="text-sm font-bold text-neutral-200">{awayTeam}</span>
           <span className="text-xs text-neutral-400 mx-1.5">@</span>
           <span className="text-sm font-bold text-neutral-200">{homeTeam}</span>
         </div>
-        <div className="text-right">
-          <div className="text-xs text-neutral-400">O/U</div>
-          <div className="text-sm font-bold text-chalk-orange">
-            {predictedTotal.toFixed(1)}
+        {predictedTotal !== undefined && (
+          <div className="text-right shrink-0">
+            <div className="text-xs text-neutral-400">O/U</div>
+            <div className="text-sm font-bold text-chalk-orange">
+              {predictedTotal.toFixed(1)}
+            </div>
           </div>
+        )}
+      </div>
+      {playerCount !== undefined && playerCount > 0 && (
+        <div className="text-xs text-neutral-400 mt-1">
+          {playerCount} players projected
         </div>
-      </div>
-      <div className="text-xs text-neutral-400 mt-1">
-        {playerCount} players projected
-      </div>
+      )}
     </button>
   );
 }

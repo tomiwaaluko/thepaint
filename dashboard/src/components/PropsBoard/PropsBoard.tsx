@@ -29,8 +29,8 @@ export function PropsBoard({ props }: PropsBoardProps) {
 
   return (
     <div>
-      {/* Filters */}
-      <div className="flex gap-2 mb-3">
+      {/* Filters — wrap on mobile */}
+      <div className="flex flex-wrap gap-2 mb-3">
         <FilterBtn
           active={statFilter === "all"}
           onClick={() => setStatFilter("all")}

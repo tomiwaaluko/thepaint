@@ -5,6 +5,7 @@ import type {
   OverUnderLine,
   PlayerGameLog,
   PlayerPrediction,
+  TodayGamesResponse,
 } from "../types/chalk";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -20,6 +21,10 @@ async function fetchJson<T>(path: string): Promise<T> {
 export const chalkApi = {
   getHealth(): Promise<HealthResponse> {
     return fetchJson("/v1/health");
+  },
+
+  getTodayGames(): Promise<TodayGamesResponse> {
+    return fetchJson("/v1/games/today");
   },
 
   getPlayerPrediction(
