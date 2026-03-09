@@ -181,15 +181,30 @@ async def predict_game(
 async def _get_recent_roster(
     session: AsyncSession, team_id: int, as_of_date: date, limit: int = 12,
 ) -> list[int]:
-    """Find the team's top rotation players from recent game logs (last 30 days)."""
-    cutoff = as_of_date - timedelta(days=30)
+    """Find the team's top rotation players from game logs or players table."""
+    # Try progressively wider windows: 30 days, 90 days, all time
+    for days_back in [30, 90, None]:
+        query = (
+            select(PlayerGameLog.player_id)
+            .where(PlayerGameLog.team_id == team_id)
+            .where(PlayerGameLog.game_date < as_of_date)
+            .group_by(PlayerGameLog.player_id)
+            .order_by(func.avg(PlayerGameLog.min_played).desc())
+            .limit(limit)
+        )
+        if days_back is not None:
+            cutoff = as_of_date - timedelta(days=days_back)
+            query = query.where(PlayerGameLog.game_date >= cutoff)
+        result = await session.execute(query)
+        player_ids = [row[0] for row in result.all()]
+        if player_ids:
+            return player_ids
+
+    # Final fallback: active players on this team from the players table
     result = await session.execute(
-        select(PlayerGameLog.player_id)
-        .where(PlayerGameLog.team_id == team_id)
-        .where(PlayerGameLog.game_date >= cutoff)
-        .where(PlayerGameLog.game_date < as_of_date)
-        .group_by(PlayerGameLog.player_id)
-        .order_by(func.avg(PlayerGameLog.min_played).desc())
+        select(Player.player_id)
+        .where(Player.team_id == team_id)
+        .where(Player.is_active.is_(True))
         .limit(limit)
     )
     return [row[0] for row in result.all()]
