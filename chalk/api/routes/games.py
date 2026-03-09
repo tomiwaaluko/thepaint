@@ -172,7 +172,9 @@ async def predict_game(
         away_predictions=away_predictions,
     )
 
-    await set_cached(redis, cache_key, response)
+    # Only cache if we got predictions — don't cache empty results
+    if home_predictions or away_predictions:
+        await set_cached(redis, cache_key, response)
     return response
 
 
