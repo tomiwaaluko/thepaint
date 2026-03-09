@@ -148,6 +148,12 @@ async def predict_game(
     home_player_ids = [row[0] for row in home_logs.all()]
     away_player_ids = [row[0] for row in away_logs.all()]
 
+    # Fallback for upcoming games: use each team's top rotation from recent logs
+    if not home_player_ids:
+        home_player_ids = await _get_recent_roster(session, game.home_team_id, as_of_date)
+    if not away_player_ids:
+        away_player_ids = await _get_recent_roster(session, game.away_team_id, as_of_date)
+
     # Predict each player (sequentially to avoid session conflicts with async sqlite)
     home_predictions = await _predict_players(session, home_player_ids, game_id, as_of_date)
     away_predictions = await _predict_players(session, away_player_ids, game_id, as_of_date)
@@ -168,6 +174,23 @@ async def predict_game(
 
     await set_cached(redis, cache_key, response)
     return response
+
+
+async def _get_recent_roster(
+    session: AsyncSession, team_id: int, as_of_date: date, limit: int = 12,
+) -> list[int]:
+    """Find the team's top rotation players from recent game logs (last 30 days)."""
+    cutoff = as_of_date - timedelta(days=30)
+    result = await session.execute(
+        select(PlayerGameLog.player_id)
+        .where(PlayerGameLog.team_id == team_id)
+        .where(PlayerGameLog.game_date >= cutoff)
+        .where(PlayerGameLog.game_date < as_of_date)
+        .group_by(PlayerGameLog.player_id)
+        .order_by(func.avg(PlayerGameLog.min_played).desc())
+        .limit(limit)
+    )
+    return [row[0] for row in result.all()]
 
 
 async def _predict_players(
