@@ -241,3 +241,31 @@ Read these before working on the relevant module:
 ## Development Phases
 
 The project follows 8 phases: (1) Data Infrastructure, (2) Feature Engineering Pipeline, (3) Baseline ML Models, (4) Prediction API, (5) Betting & Fantasy Modules, (6) Dashboard UI, (7) Automation & Monitoring, (8) Ensemble & Tuning.
+
+## Session Rules
+
+After completing any significant change, Claude Code must update `TODO.md` with:
+- What was changed and why
+- Which files were modified
+- Current status of the phase or feature
+- Any new issues discovered or deferred
+
+After every session, Claude Code must update `CHANGELOG.md` in the project root with a dated entry using this format:
+
+```
+## YYYY-MM-DD
+### Done
+- bullet points
+### Metrics
+- bullet points
+### Pending
+- bullet points
+### Next
+- bullet points
+```
+
+Each entry should summarize:
+- What was built or fixed
+- Key metrics or results (MAE scores, test counts, latency numbers)
+- What's pending or broken
+- Next recommended action
