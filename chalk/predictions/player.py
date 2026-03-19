@@ -16,7 +16,12 @@ from chalk.api.schemas import (
 from chalk.db.models import Game, Injury, Player, PlayerGameLog, Team
 from chalk.exceptions import PredictionError
 from chalk.features.pipeline import generate_features
-from chalk.models.registry import get_model_version, load_model, load_quantile_models
+from chalk.models.registry import (
+    get_model_version,
+    load_lgbm_model,
+    load_model,
+    load_quantile_models,
+)
 from chalk.predictions.distributions import build_stat_prediction
 
 log = structlog.get_logger()
@@ -24,6 +29,8 @@ log = structlog.get_logger()
 POINT_STATS = ["pts", "reb", "ast", "fg3m"]
 QUANTILE_STATS = {"pts", "reb", "ast"}
 ALL_STATS = ["pts", "reb", "ast", "fg3m", "stl", "blk", "to_committed"]
+# Stats with trained LightGBM models (Phase 8 — lower MAE than XGBoost)
+LGBM_STATS = {"pts", "reb", "ast", "fg3m"}
 
 
 async def predict_player(
@@ -59,7 +66,14 @@ async def predict_player(
     stat_predictions: list[StatPrediction] = []
     for stat in ALL_STATS:
         try:
-            model = load_model(stat)
+            # Use LightGBM for stats where it outperforms XGBoost (Phase 8)
+            if stat in LGBM_STATS:
+                try:
+                    model = load_lgbm_model(stat)
+                except Exception:
+                    model = load_model(stat)
+            else:
+                model = load_model(stat)
             # Align feature columns to what the model expects
             model_features = model.feature_names or list(feature_df.columns)
             X = _align_features(feature_df, model_features)

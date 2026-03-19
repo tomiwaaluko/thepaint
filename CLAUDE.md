@@ -25,7 +25,7 @@ The full architecture and roadmap is documented in `NBA_Prediction_System_Roadma
 | Probabilistic Output | MAPIE + quantile regression |
 | Experiment Tracking | MLflow |
 | API | FastAPI (async) |
-| Task Scheduling | Apache Airflow |
+| Task Scheduling | Railway Cron Jobs (prod) / Apache Airflow (local) |
 | Caching | Redis |
 | Frontend | React + Recharts |
 | Containerization | Docker + Docker Compose |
@@ -228,6 +228,29 @@ NBA_API_CACHE_DIR=.cache/nba_api
 - Training data: 2015–2024 seasons (~9 seasons, ~1.2M player-game rows)
 - Active players tracked: top 150 by minutes per game
 
+## Production Deployment
+
+The project runs on Railway (production) with the following service layout:
+
+| Service | Type | URL / Notes |
+|---|---|---|
+| `web` | Web service | FastAPI API — `web-production-4c591.up.railway.app` |
+| `thepaint` | Web service | React frontend — `thepaint-production.up.railway.app` |
+| `Redis` | Redis add-on | Shared by all services via `redis.railway.internal:6379` |
+| `ingest` | Cron (07:00 UTC) | `railway.ingest.json` → `scripts/railway_ingest.py` |
+| `prediction` | Cron (18:00 UTC) | `railway.predict.json` → `scripts/railway_predict.py` |
+
+Database: **Supabase PostgreSQL** via Session Pooler (NOT direct connection — IPv4 incompatible on Railway).
+
+Key production rules:
+- Always use `DOCKERFILE` builder for Python services — Railpack will miss the `chalk` package
+- Cron services share the same Docker image as `web` — same Dockerfile, different start command
+- Service-to-service calls use Railway private networking: `http://web.railway.internal:8000`
+- Redis URL is auto-injected from the Redis service — reference it via `${{Redis.REDIS_URL}}`
+- MLflow is NOT deployed in production — model files are committed to git and loaded from disk
+
+See `.claude/skills/railway-deployment/SKILL.md` for full setup details.
+
 ## Skills Available
 
 Read these before working on the relevant module:
@@ -237,6 +260,8 @@ Read these before working on the relevant module:
 - `.claude/skills/model-training/SKILL.md` — XGBoost setup, walk-forward CV, MLflow logging
 - `.claude/skills/mlflow-tracking/SKILL.md` — experiment naming, artifact logging, model registry
 - `.claude/skills/api-patterns/SKILL.md` — FastAPI route patterns, response schemas, caching
+- `.claude/skills/railway-deployment/SKILL.md` — Railway cron jobs, Supabase connection, private networking
+- `.claude/skills/ensemble-tuning/SKILL.md` — Phase 8: Optuna, LightGBM, stacking, CLV tracking
 
 ## Development Phases
 

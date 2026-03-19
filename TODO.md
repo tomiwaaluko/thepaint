@@ -10,8 +10,8 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 ## Current Status
 
 **Active Phase:** Phase 8 — Ensemble & Tuning
-**Current Task:** Phase 7 complete — ready for Phase 8
-**Last Updated:** Session 6
+**Current Task:** Optuna + LightGBM + Stacking implemented — needs training run on real data
+**Last Updated:** Session 8
 
 ---
 
@@ -188,12 +188,27 @@ in TODO.md and run any relevant tests before stopping.
 **Phase File:** `.claude/phases/phase-8-ensemble-tuning.md`
 **Goal:** Stacked ensemble, Optuna hyperparameter search, edge tracking over time.
 
-- [ ] Optuna hyperparameter search for each stat model
-- [ ] LightGBM models as XGBoost alternatives
-- [ ] Stacking meta-learner — blends XGBoost + LightGBM + historical median
+- [x] Optuna hyperparameter search for each stat model — `chalk/models/tuning.py`
+- [x] LightGBM models as XGBoost alternatives — `chalk/models/lgbm.py`
+- [x] Stacking meta-learner — blends XGBoost + LightGBM + historical median — `chalk/models/ensemble.py`
+- [x] Ensemble training script — `scripts/train_ensemble.py`
+- [x] Registry support for LightGBM + ensemble save/load — `chalk/models/registry.py`
+- [x] Phase 8 tests — 14 tests passing (6 LightGBM, 3 tuning, 5 ensemble)
+- [x] Run ensemble training on real data (50 Optuna trials per stat per model type)
+- [x] Prediction pipeline updated to use LightGBM as primary model — `chalk/predictions/player.py`
 - [ ] Edge tracking dashboard — model edge vs. closing line value over time
-- [ ] Monthly retraining job
+- [ ] Monthly retraining job — `scripts/retrain_monthly.py`
 - [ ] Final MAE benchmarks vs. Vegas closing line accuracy
+
+**Phase 8 Benchmark Results:**
+| Stat | Phase 3 XGB | Tuned LGBM | Improvement |
+|---|---|---|---|
+| PTS | 4.94 | **4.906** | +0.7% |
+| REB | 2.02 | **1.995** | +1.2% |
+| AST | 1.47 | **1.454** | +1.1% |
+| FG3M | 0.94 | **0.907** | **+3.5%** |
+
+**Key Finding:** LightGBM standalone outperforms both XGBoost and the stacked ensemble on every stat. Stacking doesn't help because both tree models are highly correlated. LightGBM's MAE objective (`regression_l1`) is the main driver of improvement.
 
 **Phase 8 Done When:** Ensemble MAE improves ≥ 2% over best single model, edge tracking shows positive CLV on held-out games.
 
@@ -211,6 +226,10 @@ Track every significant architectural decision here so future sessions don't re-
 | API framework | FastAPI async | Performance, async-native | Pre-build |
 | Model structure | One model per stat | Easier debugging, independent feature sets | Pre-build |
 | Project name | The Paint | Betting slang for the court / paint area; clean brand | Pre-build |
+| Production DB | Supabase (Session Pooler) | Railway is IPv4-only; Direct Connection incompatible; Transaction Pooler breaks asyncpg | 2026-03-16 |
+| Production scheduling | Railway Cron Jobs (not Airflow) | Airflow requires 3 services + overhead; Railway cron is zero-infra | 2026-03-16 |
+| Production builder | Dockerfile (not Railpack) | Railpack doesn't install the `chalk` package; Dockerfile ensures full env | 2026-03-16 |
+| Primary model | LightGBM (not XGBoost) | LGBM beats XGB on all 4 stats; MAE objective (regression_l1) is key driver; ensemble stacking adds no value | 2026-03-16 |
 
 ---
 
@@ -225,4 +244,6 @@ Track every significant architectural decision here so future sessions don't re-
 
 ## Blockers
 
-None currently.
+- **Stale dashboard data** — DB has no games after 2026-03-08. Cron jobs will fill forward from today but 3/9–3/15 gap needs a one-time backfill script run against production Supabase.
+- **Odds fetcher stubbed** — `fetch_odds_lines()` in `railway_ingest.py` logs game count but does not fetch real odds. Props Board shows no real Vegas lines.
+- **Cron crash verification** — Ingest and prediction cron services were crashing due to Railpack builder (fixed to Dockerfile). Next scheduled run will confirm fix.
