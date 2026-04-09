@@ -122,7 +122,7 @@ async def main_async() -> bool:
                             p25=sp.p25,
                             p50=sp.p50,
                             p75=sp.p75,
-                            p90=sp.ceiling,
+                            p90=sp.p90,
                         )
                         session.add(db_pred)
                     successful_pids.append(pid)
