@@ -1,14 +1,25 @@
 """LightGBM stat model — drop-in alternative to XGBoost BaseStatModel."""
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import joblib
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error
 
 from chalk.exceptions import ModelNotFoundError
+
+if TYPE_CHECKING:
+    import lightgbm as lgb
+else:
+    try:
+        import lightgbm as lgb
+    except (OSError, ImportError) as e:
+        lgb = None  # type: ignore
+        _LGBM_IMPORT_ERROR = e
+    else:
+        _LGBM_IMPORT_ERROR = None
 
 DEFAULT_LGBM_PARAMS = {
     "n_estimators": 2000,
@@ -33,7 +44,7 @@ class LGBMStatModel:
     stat: str
     model_name: str
     lgbm_params: dict = field(default_factory=lambda: dict(DEFAULT_LGBM_PARAMS))
-    model: lgb.LGBMRegressor | None = None
+    model: "lgb.LGBMRegressor | None" = None
     feature_names: list[str] | None = None
 
     def train(
@@ -44,6 +55,11 @@ class LGBMStatModel:
         y_val: pd.Series | None = None,
         early_stopping_rounds: int | None = 50,
     ) -> None:
+        if lgb is None:
+            raise ImportError(
+                f"LightGBM is not available: {_LGBM_IMPORT_ERROR}. "
+                "This may be due to a missing system library (libgomp.so.1)."
+            )
         params = dict(self.lgbm_params)
         self.model = lgb.LGBMRegressor(**params)
         fit_kwargs: dict = {}

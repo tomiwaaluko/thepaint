@@ -6,6 +6,18 @@ import pytest
 from chalk.exceptions import ModelNotFoundError
 from chalk.models.lgbm import LGBMStatModel, DEFAULT_LGBM_PARAMS
 
+# Import lgb to check if it's available
+try:
+    from chalk.models import lgbm
+    LGBM_AVAILABLE = lgbm.lgb is not None
+except (ImportError, AttributeError):
+    LGBM_AVAILABLE = False
+
+pytestmark = pytest.mark.skipif(
+    not LGBM_AVAILABLE,
+    reason="LightGBM not available (missing system library libgomp.so.1)"
+)
+
 
 def _make_data(n=200, n_features=10, seed=42):
     """Generate synthetic regression data."""
