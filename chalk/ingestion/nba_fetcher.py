@@ -27,6 +27,25 @@ CACHE_DIR = Path(settings.NBA_API_CACHE_DIR)
 MAX_RETRIES = 5
 BASE_DELAY = 2.0
 BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
+REQUEST_TIMEOUT = 60  # seconds — stats.nba.com can be slow from cloud IPs
+
+# Browser-like headers required by stats.nba.com; without Referer/Origin the
+# API silently drops connections from cloud datacenter IPs.
+NBA_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
+    "Host": "stats.nba.com",
+    "Origin": "https://www.nba.com",
+    "Referer": "https://www.nba.com/",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/121.0.0.0 Safari/537.36"
+    ),
+    "x-nba-stats-origin": "stats",
+    "x-nba-stats-token": "true",
+}
 
 
 def _cache_path(endpoint: str, params: dict) -> Path:
@@ -46,10 +65,13 @@ async def _fetch_with_backoff(endpoint_cls, params: dict, endpoint_name: str) ->
         return json.loads(cache_file.read_text())
 
     for attempt in range(MAX_RETRIES):
+        # Small jitter before every request to avoid thundering-herd on retries
+        await asyncio.sleep(random.uniform(0.5, 1.5))
         try:
             loop = asyncio.get_event_loop()
             endpoint = await loop.run_in_executor(
-                None, lambda: endpoint_cls(**params)
+                None,
+                lambda: endpoint_cls(**params, headers=NBA_HEADERS, timeout=REQUEST_TIMEOUT),
             )
             data = endpoint.get_normalized_dict()
             cache_file.write_text(json.dumps(data))
