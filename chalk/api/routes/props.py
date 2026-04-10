@@ -41,7 +41,8 @@ async def player_props(
     invalid = [s for s in stats if s not in ALLOWED_STATS]
     if invalid:
         raise HTTPException(status_code=422, detail=f"Invalid stats: {invalid}. Allowed: {sorted(ALLOWED_STATS)}")
-    cache_key = f"props:player:{player_id}:game:{game_id}"
+    stats_key = ",".join(sorted(stats))
+    cache_key = f"props:player:{player_id}:game:{game_id}:stats:{stats_key}"
     cached = await get_cached(redis, cache_key, list)
     # list won't deserialize properly, handle manually
     try:

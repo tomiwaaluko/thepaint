@@ -111,7 +111,7 @@ async def get_today_games(
 
 @router.delete("/{game_id}/cache")
 async def clear_game_cache(
-    game_id: str,
+    game_id: str = Path(..., pattern=r"^[0-9]{10}$", description="NBA game ID"),
     x_invalidation_token: str | None = Header(None, alias="X-Invalidation-Token"),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
