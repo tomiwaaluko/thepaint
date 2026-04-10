@@ -102,3 +102,55 @@ export interface PlayerGameLog {
   fg3m: number;
   min_played: number;
 }
+
+// ─── Recap types ───
+
+export interface RecapStatComparison {
+  stat: string;
+  predicted: number;
+  actual: number;
+  p10: number;
+  p25: number;
+  p75: number;
+  p90: number;
+  error: number;
+  grade: "hit" | "close" | "miss";
+}
+
+export interface RecapPlayerEntry {
+  player_id: number;
+  player_name: string;
+  team_abbreviation: string;
+  position: string;
+  stats: RecapStatComparison[];
+  hit_count: number;
+  close_count: number;
+  miss_count: number;
+}
+
+export interface RecapGameEntry {
+  game_id: string;
+  date: string;
+  home_team: string;
+  away_team: string;
+  home_score: number | null;
+  away_score: number | null;
+  players: RecapPlayerEntry[];
+  game_mae: number;
+  game_hit_rate: number;
+}
+
+export interface RecapSummary {
+  total_predictions: number;
+  hit_rate: number;
+  close_rate: number;
+  miss_rate: number;
+  mae_by_stat: Record<string, number>;
+  overall_mae: number;
+}
+
+export interface RecapResponse {
+  date: string;
+  summary: RecapSummary;
+  games: RecapGameEntry[];
+}

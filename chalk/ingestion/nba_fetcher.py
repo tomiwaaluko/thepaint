@@ -18,7 +18,7 @@ from chalk.ingestion.seed import team_id_from_abbr, upsert_games, upsert_player
 
 # Static ID→name lookup for all active + historical players (avoids DB name fallback to ID)
 _PLAYER_ID_TO_NAME: dict[int, str] = {
-    p["id"]: p["full_name"] for p in nba_players_static.get_all_players()
+    p["id"]: p["full_name"] for p in nba_players_static.get_players()
 }
 
 log = structlog.get_logger()

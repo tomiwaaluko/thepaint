@@ -5,6 +5,7 @@ import './index.css'
 
 const App = lazy(() => import('./App'))
 const LandingPage = lazy(() => import('./pages/LandingPage'))
+const RecapPage = lazy(() => import('./pages/RecapPage'))
 
 function LoadingFallback() {
   return (
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/dashboard" element={<App />} />
+          <Route path="/recap" element={<RecapPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

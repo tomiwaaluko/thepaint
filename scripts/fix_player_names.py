@@ -19,7 +19,7 @@ from chalk.db.session import async_session_factory
 log = structlog.get_logger()
 
 _PLAYER_ID_TO_NAME: dict[int, str] = {
-    p["id"]: p["full_name"] for p in nba_players_static.get_all_players()
+    p["id"]: p["full_name"] for p in nba_players_static.get_players()
 }
 
 
@@ -31,7 +31,7 @@ async def main():
         fixed = 0
         for player in players:
             # A name that is purely numeric means it was stored as the player ID
-            if player.name.isdigit():
+            if player.name and player.name.isdigit():
                 real_name = _PLAYER_ID_TO_NAME.get(player.player_id)
                 if real_name:
                     await session.execute(

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Activity } from "lucide-react";
 import { chalkApi } from "./api/chalk";
@@ -176,6 +177,12 @@ function Dashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              to="/recap"
+              className="text-xs text-neutral-400 hover:text-chalk-orange transition-colors"
+            >
+              Recap
+            </Link>
             <div className="flex items-center gap-1.5">
               <Activity
                 size={12}
