@@ -38,11 +38,11 @@ async def player_props(
     redis: aioredis.Redis = Depends(get_redis),
 ) -> list[OverUnderResponse]:
     """Return O/U probability + edge for each stat vs. Vegas lines."""
-    invalid = [s for s in stats if s not in ALLOWED_STATS]
+    canonical_stats = sorted(set(stats))
+    invalid = [s for s in canonical_stats if s not in ALLOWED_STATS]
     if invalid:
         raise HTTPException(status_code=422, detail=f"Invalid stats: {invalid}. Allowed: {sorted(ALLOWED_STATS)}")
-    stats_key = ",".join(sorted(stats))
-    cache_key = f"props:player:{player_id}:game:{game_id}:stats:{stats_key}"
+    cache_key = f"props:player:{player_id}:game:{game_id}:stats:{','.join(canonical_stats)}"
     cached = await get_cached(redis, cache_key, list)
     # list won't deserialize properly, handle manually
     try:
@@ -77,7 +77,7 @@ async def player_props(
             line_map[bl.market] = bl
 
     responses = []
-    for stat in stats:
+    for stat in canonical_stats:
         sp = pred_map.get(stat)
         if not sp:
             continue

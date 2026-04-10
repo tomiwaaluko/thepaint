@@ -116,8 +116,9 @@ async def clear_game_cache(
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
     """Clear cached prediction for a game. Requires X-Invalidation-Token header."""
+    import secrets
     token = settings.CACHE_INVALIDATION_TOKEN
-    if not token or x_invalidation_token != token:
+    if not token or not secrets.compare_digest(x_invalidation_token or "", token):
         raise HTTPException(status_code=403, detail="Invalid or missing invalidation token")
     deleted = await redis.delete(f"pred:game:{game_id}")
     return {"game_id": game_id, "cleared": deleted > 0}
