@@ -25,7 +25,7 @@ async def predict_team_stats(
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> TeamPredictionResponse:
-    as_of_date = as_of.date() if as_of else datetime.now(ET_TZ).date()
+    as_of_date = as_of.astimezone(ET_TZ).date() if as_of else datetime.now(ET_TZ).date()
     if as_of_date > datetime.now(ET_TZ).date():
         raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
 

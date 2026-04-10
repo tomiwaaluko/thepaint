@@ -145,7 +145,7 @@ async def predict_game(
     if not game:
         raise HTTPException(status_code=404, detail=f"Game {game_id} not found")
 
-    as_of_date = as_of.date() if as_of else game.date
+    as_of_date = as_of.astimezone(ET_TZ).date() if as_of else game.date
     if as_of and as_of_date > datetime.now(ET_TZ).date():
         raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
 
