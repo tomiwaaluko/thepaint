@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from chalk.api.routes import fantasy, games, health, players, props, teams
@@ -18,7 +19,7 @@ async def lifespan(app: FastAPI):
     """Pre-load all models into memory cache on startup."""
     from chalk.models.registry import load_model
 
-    for stat in ["pts", "reb", "ast", "fg3m"]:
+    for stat in ["pts", "reb", "ast", "fg3m", "stl", "blk", "to_committed"]:
         try:
             load_model(stat)
             log.info("model_loaded", stat=stat)
@@ -37,6 +38,7 @@ app = FastAPI(
 
 # CORS — origins controlled by ALLOWED_ORIGINS env var (comma-separated or "*")
 _origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",")]
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
