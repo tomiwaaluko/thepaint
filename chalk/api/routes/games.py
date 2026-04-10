@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import redis.asyncio as aioredis
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from chalk.api.schemas import (
     PlayerPredictionResponse,
     TodayGamesResponse,
 )
+from chalk.config import settings
 from chalk.db.models import Game, Player, PlayerGameLog, Team
 from chalk.exceptions import PredictionError
 from chalk.ingestion.nba_fetcher import ingest_today_scoreboard
@@ -111,16 +112,20 @@ async def get_today_games(
 @router.delete("/{game_id}/cache")
 async def clear_game_cache(
     game_id: str,
+    x_invalidation_token: str | None = Header(None, alias="X-Invalidation-Token"),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
-    """Clear cached prediction for a game."""
+    """Clear cached prediction for a game. Requires X-Invalidation-Token header."""
+    token = settings.CACHE_INVALIDATION_TOKEN
+    if not token or x_invalidation_token != token:
+        raise HTTPException(status_code=403, detail="Invalid or missing invalidation token")
     deleted = await redis.delete(f"pred:game:{game_id}")
     return {"game_id": game_id, "cleared": deleted > 0}
 
 
 @router.get("/{game_id}/predict", response_model=GamePredictionResponse)
 async def predict_game(
-    game_id: str,
+    game_id: str = Path(..., pattern=r"^[0-9]{10}$", description="NBA game ID"),
     as_of: datetime | None = Query(None, description="Prediction as-of datetime"),
     nocache: bool = Query(False, description="Skip cache lookup"),
     session: AsyncSession = Depends(get_db),
@@ -141,6 +146,8 @@ async def predict_game(
         raise HTTPException(status_code=404, detail=f"Game {game_id} not found")
 
     as_of_date = as_of.date() if as_of else game.date
+    if as_of and as_of_date > date.today():
+        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
 
     # Get team names
     home_team = await session.get(Team, game.home_team_id)

@@ -1,9 +1,10 @@
 """Fantasy scoring routes."""
 from datetime import date, datetime
+from typing import Literal
 
 import redis.asyncio as aioredis
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +25,9 @@ router = APIRouter(prefix="/v1", tags=["fantasy"])
 
 @router.get("/players/{player_id}/fantasy", response_model=FantasyProjectionResponse)
 async def player_fantasy(
-    player_id: int,
-    game_id: str = Query(..., description="NBA game ID"),
-    platform: str = Query("draftkings", description="Fantasy platform"),
+    player_id: int = Path(..., gt=0, description="Player ID"),
+    game_id: str = Query(..., description="NBA game ID", pattern=r"^[0-9]{10}$"),
+    platform: Literal["draftkings", "fanduel", "yahoo"] = Query("draftkings", description="Fantasy platform"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> FantasyProjectionResponse:
@@ -68,8 +69,8 @@ async def player_fantasy(
 
 @router.get("/games/{game_id}/fantasy", response_model=SlateFantasyResponse)
 async def game_fantasy(
-    game_id: str,
-    platform: str = Query("draftkings", description="Fantasy platform"),
+    game_id: str = Path(..., pattern=r"^[0-9]{10}$", description="NBA game ID"),
+    platform: Literal["draftkings", "fanduel", "yahoo"] = Query("draftkings", description="Fantasy platform"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> SlateFantasyResponse:

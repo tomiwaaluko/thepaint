@@ -12,12 +12,19 @@ import asyncio
 import os
 import sys
 from datetime import datetime, time
+from urllib.parse import urlparse
 
 import structlog
 
 log = structlog.get_logger()
 
-API_INTERNAL_URL = os.getenv("API_INTERNAL_URL", "")
+_raw_api_url = os.getenv("API_INTERNAL_URL", "")
+_ALLOWED_API_HOSTS = {"web.railway.internal", "localhost", "127.0.0.1"}
+if _raw_api_url:
+    _parsed = urlparse(_raw_api_url)
+    if _parsed.hostname not in _ALLOWED_API_HOSTS:
+        raise ValueError(f"API_INTERNAL_URL hostname '{_parsed.hostname}' not in allowed list: {_ALLOWED_API_HOSTS}")
+API_INTERNAL_URL = _raw_api_url
 
 
 async def main_async() -> bool:

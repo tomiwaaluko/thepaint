@@ -11,8 +11,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     NBA_API_CACHE_DIR: Path = Path(".cache/nba_api")
     # Comma-separated list of allowed CORS origins.
-    # Set to "*" or a specific Railway/Vercel frontend URL in production.
-    ALLOWED_ORIGINS: str = "*"
+    # Override in production via ALLOWED_ORIGINS env var.
+    ALLOWED_ORIGINS: str = "https://thepaint-production.up.railway.app,http://localhost:5173"
+    # Optional token required to call DELETE /games/{id}/cache.
+    # Leave unset to disable the endpoint entirely.
+    CACHE_INVALIDATION_TOKEN: str = ""
 
     model_config = {"env_file": ".env"}
 
