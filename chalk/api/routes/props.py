@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 import redis.asyncio as aioredis
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,18 +26,23 @@ log = structlog.get_logger()
 router = APIRouter(prefix="/v1/players", tags=["props"])
 
 DEFAULT_STATS = ["pts", "reb", "ast", "fg3m"]
+ALLOWED_STATS = frozenset({"pts", "reb", "ast", "fg3m", "stl", "blk", "to_committed"})
 
 
 @router.get("/{player_id}/props", response_model=list[OverUnderResponse])
 async def player_props(
-    player_id: int,
-    game_id: str = Query(..., description="NBA game ID"),
+    player_id: int = Path(..., gt=0, description="Player ID"),
+    game_id: str = Query(..., description="NBA game ID", pattern=r"^[0-9]{10}$"),
     stats: list[str] = Query(default=DEFAULT_STATS),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> list[OverUnderResponse]:
     """Return O/U probability + edge for each stat vs. Vegas lines."""
-    cache_key = f"props:player:{player_id}:game:{game_id}"
+    canonical_stats = sorted(set(stats))
+    invalid = [s for s in canonical_stats if s not in ALLOWED_STATS]
+    if invalid:
+        raise HTTPException(status_code=422, detail=f"Invalid stats: {invalid}. Allowed: {sorted(ALLOWED_STATS)}")
+    cache_key = f"props:player:{player_id}:game:{game_id}:stats:{','.join(canonical_stats)}"
     cached = await get_cached(redis, cache_key, list)
     # list won't deserialize properly, handle manually
     try:
@@ -72,7 +77,7 @@ async def player_props(
             line_map[bl.market] = bl
 
     responses = []
-    for stat in stats:
+    for stat in canonical_stats:
         sp = pred_map.get(stat)
         if not sp:
             continue

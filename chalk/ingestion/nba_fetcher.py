@@ -24,8 +24,10 @@ BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
 
 
 def _cache_path(endpoint: str, params: dict) -> Path:
-    key = hashlib.md5(f"{endpoint}{sorted(params.items())}".encode()).hexdigest()
-    return CACHE_DIR / endpoint / f"{key}.json"
+    # Sanitize endpoint name to prevent path traversal — keep only alphanumerics/underscores
+    safe_endpoint = "".join(c for c in endpoint if c.isalnum() or c == "_")
+    key = hashlib.md5(f"{safe_endpoint}{sorted(params.items())}".encode()).hexdigest()
+    return CACHE_DIR / safe_endpoint / f"{key}.json"
 
 
 async def _fetch_with_backoff(endpoint_cls, params: dict, endpoint_name: str) -> dict:

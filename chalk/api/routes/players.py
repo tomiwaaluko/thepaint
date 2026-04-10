@@ -2,7 +2,7 @@
 from datetime import date, datetime, timezone
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +18,8 @@ router = APIRouter(prefix="/v1/players", tags=["players"])
 
 @router.get("/{player_id}/predict", response_model=PlayerPredictionResponse)
 async def predict_player_statline(
-    player_id: int,
-    game_id: str = Query(..., description="NBA game ID"),
+    player_id: int = Path(..., gt=0, description="Player ID"),
+    game_id: str = Query(..., description="NBA game ID", pattern=r"^[0-9]{10}$"),
     as_of: datetime | None = Query(None, description="Prediction as-of datetime (default: now)"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
@@ -31,6 +31,8 @@ async def predict_player_statline(
         return cached
 
     as_of_date = as_of.date() if as_of else date.today()
+    if as_of_date > date.today():
+        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
 
     try:
         response = await predict_player(session, player_id, game_id, as_of_date)
@@ -45,7 +47,7 @@ async def predict_player_statline(
 
 @router.get("/{player_id}/history")
 async def player_history(
-    player_id: int,
+    player_id: int = Path(..., gt=0, description="Player ID"),
     limit: int = Query(10, ge=1, le=50),
     session: AsyncSession = Depends(get_db),
 ) -> list[dict]:
