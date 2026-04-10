@@ -7,6 +7,7 @@ from pathlib import Path
 
 import structlog
 from nba_api.stats.endpoints import leaguegamelog, playergamelog, scoreboardv2
+from nba_api.stats.static import players as nba_players_static
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,11 @@ from chalk.config import settings
 from chalk.db.models import PlayerGameLog, TeamGameLog
 from chalk.exceptions import IngestError
 from chalk.ingestion.seed import team_id_from_abbr, upsert_games, upsert_player
+
+# Static ID→name lookup for all active + historical players (avoids DB name fallback to ID)
+_PLAYER_ID_TO_NAME: dict[int, str] = {
+    p["id"]: p["full_name"] for p in nba_players_static.get_players()
+}
 
 log = structlog.get_logger()
 
@@ -238,7 +244,9 @@ async def ingest_player_season(
     effective_team_id = team_id if team_id > 0 else team_id_from_abbr(first_team_abbr)
 
     # Upsert the player record (FK: players)
-    await upsert_player(session, player_id, player_name or str(player_id), effective_team_id)
+    # Prefer: explicitly passed name → static NBA lookup → numeric ID as last resort
+    effective_name = player_name or _PLAYER_ID_TO_NAME.get(player_id, "") or str(player_id)
+    await upsert_player(session, player_id, effective_name, effective_team_id)
 
     # Build game records and game log rows
     game_rows = []

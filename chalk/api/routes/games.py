@@ -120,7 +120,14 @@ async def clear_game_cache(
     token = settings.CACHE_INVALIDATION_TOKEN
     if not token or not secrets.compare_digest(x_invalidation_token or "", token):
         raise HTTPException(status_code=403, detail="Invalid or missing invalidation token")
-    deleted = await redis.delete(f"pred:game:{game_id}")
+    deleted = 0
+    cursor = 0
+    while True:
+        cursor, keys = await redis.scan(cursor, match=f"pred:game:{game_id}:*", count=100)
+        if keys:
+            deleted += await redis.delete(*keys)
+        if cursor == 0:
+            break
     return {"game_id": game_id, "cleared": deleted > 0}
 
 
@@ -132,23 +139,23 @@ async def predict_game(
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> GamePredictionResponse:
-    cache_key = f"pred:game:{game_id}"
+    # Load game first to resolve as_of_date default
+    result = await session.execute(select(Game).where(Game.game_id == game_id))
+    game = result.scalar_one_or_none()
+    if not game:
+        raise HTTPException(status_code=404, detail=f"Game {game_id} not found")
+
+    as_of_date = as_of.astimezone(ET_TZ).date() if as_of else game.date
+    if as_of and as_of_date > datetime.now(ET_TZ).date():
+        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
+
+    cache_key = f"pred:game:{game_id}:as_of:{as_of_date}"
     if nocache:
         await redis.delete(cache_key)
     else:
         cached = await get_cached(redis, cache_key, GamePredictionResponse)
         if cached:
             return cached
-
-    # Load game
-    result = await session.execute(select(Game).where(Game.game_id == game_id))
-    game = result.scalar_one_or_none()
-    if not game:
-        raise HTTPException(status_code=404, detail=f"Game {game_id} not found")
-
-    as_of_date = as_of.date() if as_of else game.date
-    if as_of and as_of_date > date.today():
-        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
 
     # Get team names
     home_team = await session.get(Team, game.home_team_id)
