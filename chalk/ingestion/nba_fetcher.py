@@ -29,15 +29,21 @@ BASE_DELAY = 2.0
 BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
 REQUEST_TIMEOUT = 60  # seconds — stats.nba.com can be slow from cloud IPs
 
-# Browser-like headers required by stats.nba.com; without Referer/Origin the
-# API silently drops connections from cloud datacenter IPs.
+# Browser-like headers required by stats.nba.com.
+# stats.nba.com is typically accessed via nba.com links, so Origin/Referer must
+# be nba.com (not stats.nba.com). The Sec-Fetch-* headers are required by
+# Cloudflare/WAF rules — omitting them causes requests from cloud IPs to hang.
+# Do NOT include Host here — it's set automatically by the HTTP library.
 NBA_HEADERS = {
     "Accept": "application/json, text/plain, */*",
+    "Accept-Encoding": "gzip, deflate, br",
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive",
-    "Host": "stats.nba.com",
     "Origin": "https://www.nba.com",
     "Referer": "https://www.nba.com/",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -46,6 +52,10 @@ NBA_HEADERS = {
     "x-nba-stats-origin": "stats",
     "x-nba-stats-token": "true",
 }
+
+# Optional proxy for bypassing IP-based blocks (configure via NBA_PROXY_URL env var).
+# Format: "http://user:pass@host:port" — leave blank to disable.
+_NBA_PROXY: str | None = settings.NBA_PROXY_URL or None
 
 
 def _cache_path(endpoint: str, params: dict) -> Path:
@@ -69,9 +79,14 @@ async def _fetch_with_backoff(endpoint_cls, params: dict, endpoint_name: str) ->
         await asyncio.sleep(random.uniform(0.5, 1.5))
         try:
             loop = asyncio.get_event_loop()
+            kwargs: dict = {"headers": NBA_HEADERS, "timeout": REQUEST_TIMEOUT}
+            if _NBA_PROXY:
+                kwargs["proxy"] = _NBA_PROXY
+            _params = params  # capture for lambda closure
+            _kwargs = kwargs
             endpoint = await loop.run_in_executor(
                 None,
-                lambda: endpoint_cls(**params, headers=NBA_HEADERS, timeout=REQUEST_TIMEOUT),
+                lambda: endpoint_cls(**_params, **_kwargs),
             )
             data = endpoint.get_normalized_dict()
             cache_file.write_text(json.dumps(data))
@@ -109,8 +124,11 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
     loop = asyncio.get_event_loop()
 
     try:
+        _sb_kwargs: dict = {"headers": NBA_HEADERS, "timeout": REQUEST_TIMEOUT}
+        if _NBA_PROXY:
+            _sb_kwargs["proxy"] = _NBA_PROXY
         board = await loop.run_in_executor(
-            None, lambda: scoreboardv2.ScoreboardV2(game_date=date_str)
+            None, lambda: scoreboardv2.ScoreboardV2(game_date=date_str, **_sb_kwargs)
         )
         data = board.get_normalized_dict()
     except Exception as e:

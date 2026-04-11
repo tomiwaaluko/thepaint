@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Optional token required to call DELETE /games/{id}/cache.
     # Leave unset to disable the endpoint entirely.
     CACHE_INVALIDATION_TOKEN: str = ""
+    # Optional HTTP proxy URL for outbound NBA API requests.
+    # Use this when Railway datacenter IPs are blocked by stats.nba.com.
+    # Format: "http://user:pass@host:port" or "http://host:port"
+    NBA_PROXY_URL: str = ""
 
     model_config = {"env_file": ".env"}
 
