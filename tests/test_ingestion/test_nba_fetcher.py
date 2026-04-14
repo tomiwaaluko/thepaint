@@ -184,6 +184,59 @@ class TestFetchWithBackoff:
         assert "timed out" in payload["error"]
 
 
+class TestFetchWithBackoffProxy:
+    @pytest.mark.asyncio
+    async def test_passes_proxy_when_nba_proxy_url_set(self, monkeypatch, tmp_path):
+        """When NBA_PROXY_URL is configured, it should be forwarded to the endpoint."""
+        import chalk.ingestion.nba_fetcher as mod
+
+        monkeypatch.setattr(mod, "CACHE_DIR", tmp_path)
+        monkeypatch.setattr(mod.settings, "NBA_PROXY_URL", "http://proxy.example.com:8080")
+
+        captured = {}
+
+        class CapturingEndpoint:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def get_normalized_dict(self):
+                return {"data": "live"}
+
+        with (
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()),
+            patch("chalk.ingestion.nba_fetcher.random.uniform", return_value=0.0),
+        ):
+            result = await _fetch_with_backoff(CapturingEndpoint, {"key": "proxy_val"}, "TestProxy")
+
+        assert captured.get("proxy") == "http://proxy.example.com:8080"
+        assert result == {"data": "live"}
+
+    @pytest.mark.asyncio
+    async def test_no_proxy_when_nba_proxy_url_empty(self, monkeypatch, tmp_path):
+        """When NBA_PROXY_URL is empty, proxy should be None."""
+        import chalk.ingestion.nba_fetcher as mod
+
+        monkeypatch.setattr(mod, "CACHE_DIR", tmp_path)
+        monkeypatch.setattr(mod.settings, "NBA_PROXY_URL", "")
+
+        captured = {}
+
+        class CapturingEndpoint:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def get_normalized_dict(self):
+                return {"data": "live"}
+
+        with (
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()),
+            patch("chalk.ingestion.nba_fetcher.random.uniform", return_value=0.0),
+        ):
+            await _fetch_with_backoff(CapturingEndpoint, {"key": "noproxy_val"}, "TestNoProxy")
+
+        assert captured.get("proxy") is None
+
+
 class TestIngestTodayScoreboard:
     @pytest.mark.asyncio
     async def test_uses_shared_fetch_path(self):

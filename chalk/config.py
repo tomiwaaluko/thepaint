@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     NBA_API_BACKOFF_BASE_SECONDS: float = 8.0
     NBA_API_MAX_BACKOFF_SECONDS: float = 120.0
     FAILED_PLAYER_INGEST_LOG: Path = Path(".cache/failed_player_ingest.jsonl")
+    # Optional HTTP/HTTPS proxy URL for nba_api requests.
+    # Set this on Railway's ingest service to route through a residential proxy
+    # so stats.nba.com doesn't block datacenter IPs.
+    # Example: "http://user:pass@proxy.example.com:8080"
+    NBA_PROXY_URL: str = ""
     # Comma-separated list of allowed CORS origins.
     # Override in production via ALLOWED_ORIGINS env var.
     ALLOWED_ORIGINS: str = "https://thepaint-production.up.railway.app,http://localhost:5173"
