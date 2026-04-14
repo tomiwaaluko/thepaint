@@ -203,6 +203,8 @@ class TestIngestTodayScoreboard:
         with (
             patch("chalk.ingestion.nba_fetcher._fetch_with_backoff", new=AsyncMock(return_value=sample)) as fetch_mock,
             patch("chalk.ingestion.nba_fetcher.upsert_games", new=AsyncMock()) as upsert_mock,
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+            patch("chalk.ingestion.nba_fetcher.random.uniform", return_value=3.0),
         ):
             count = await ingest_today_scoreboard(mock_session, date(2024, 1, 15))
 
@@ -212,7 +214,23 @@ class TestIngestTodayScoreboard:
             endpoint_name="ScoreboardV2",
         )
         upsert_mock.assert_awaited_once()
+        sleep_mock.assert_awaited()
         assert count == 1
+
+    @pytest.mark.asyncio
+    async def test_returns_zero_if_scoreboard_fetch_fails(self):
+        mock_session = AsyncMock()
+
+        with (
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_with_backoff",
+                new=AsyncMock(side_effect=IngestError("timeout")),
+            ),
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()),
+        ):
+            count = await ingest_today_scoreboard(mock_session, date(2024, 1, 15))
+
+        assert count == 0
 
 
 class TestIngestPlayerSeason:
