@@ -1,6 +1,7 @@
 from datetime import date, datetime
 import re
 from functools import lru_cache
+import unicodedata
 
 import httpx
 import structlog
@@ -16,10 +17,17 @@ log = structlog.get_logger()
 
 ESPN_INJURY_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries"
 _SUFFIX_TOKENS = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"}
+_HARDCODED_PLAYER_ID_FALLBACKS = {
+    # Newly drafted players that can lag in nba_api's static player list.
+    "lj cryer": 1641940,
+    "adama bal": 1642380,
+}
 
 
 def _normalize_player_name(name: str) -> str:
     """Normalize player names for resilient matching across punctuation/suffix variants."""
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(c for c in name if not unicodedata.combining(c))
     cleaned = re.sub(r"[^a-z0-9\s]", "", name.lower())
     tokens = [token for token in cleaned.split() if token not in _SUFFIX_TOKENS]
     return " ".join(tokens)
@@ -63,6 +71,16 @@ async def resolve_player_id(session: AsyncSession, display_name: str) -> int | N
             player_id=player_id,
         )
         return player_id
+
+    hardcoded_player_id = _HARDCODED_PLAYER_ID_FALLBACKS.get(normalized_name)
+    if hardcoded_player_id is not None:
+        log.info(
+            "player_resolved_from_hardcoded",
+            name=display_name,
+            normalized_name=normalized_name,
+            player_id=hardcoded_player_id,
+        )
+        return hardcoded_player_id
 
     log.warning("player_not_found", name=display_name)
     return None

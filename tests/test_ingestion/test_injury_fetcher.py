@@ -65,7 +65,7 @@ class TestResolvePlayerId:
 
     @pytest.mark.asyncio
     async def test_falls_back_to_static_lookup_with_normalized_name(self):
-        """Should resolve names with punctuation/suffix variants via static lookup."""
+        """Should resolve names with punctuation/suffix/diacritic variants via static lookup."""
         mock_session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -76,11 +76,13 @@ class TestResolvePlayerId:
             {"id": 202710, "full_name": "Jimmy Butler", "is_active": True},
             {"id": 204456, "full_name": "T.J. McConnell", "is_active": True},
             {"id": 1630549, "full_name": "Day'Ron Sharpe", "is_active": True},
+            {"id": 1629029, "full_name": "Luka Dončić", "is_active": True},
         ]
         with patch("chalk.ingestion.injury_fetcher.nba_static_players.get_players", return_value=static_players) as mock_get_players:
             assert await resolve_player_id(mock_session, "Jimmy Butler III") == 202710
             assert await resolve_player_id(mock_session, "T.J. McConnell") == 204456
             assert await resolve_player_id(mock_session, "Day'Ron Sharpe") == 1630549
+            assert await resolve_player_id(mock_session, "Luka Doncic") == 1629029
             mock_get_players.assert_called_once()
         injury_fetcher._get_static_player_lookup.cache_clear()
 
@@ -95,6 +97,18 @@ class TestResolvePlayerId:
         with patch("chalk.ingestion.injury_fetcher._get_static_player_lookup", return_value={}):
             player_id = await resolve_player_id(mock_session, "Unknown Player")
             assert player_id is None
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_hardcoded_rookie_mapping(self):
+        """Should resolve rookie names from hardcoded IDs when DB/static lookup miss."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        with patch("chalk.ingestion.injury_fetcher._get_static_player_lookup", return_value={}):
+            player_id = await resolve_player_id(mock_session, "LJ Cryer")
+            assert player_id == 1641940
 
 
 class TestIngestInjuries:

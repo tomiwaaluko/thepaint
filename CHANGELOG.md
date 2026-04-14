@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-04-14 (Injury Unicode + Rookie Fallback Fix)
+
+### Done
+- Updated `chalk/ingestion/injury_fetcher.py::_normalize_player_name` to strip Unicode diacritics via `unicodedata.normalize("NFKD", ...)` before punctuation/suffix cleanup, so names like `Dončić`, `Vučević`, and `Jović` normalize to ASCII equivalents.
+- Added hardcoded rookie fallback IDs for unresolved 2025 names currently missing from `nba_api` static list resolution (`LJ Cryer`, `Adama Bal`) after DB + static lookup miss.
+- Added resolver test coverage for diacritic-insensitive static matching (`Luka Dončić` vs `Luka Doncic`) and hardcoded rookie fallback behavior.
+
+### Metrics
+- `pytest tests/test_ingestion/test_injury_fetcher.py -v` passed: 7/7 tests.
+
+### Pending
+- Monitor production ingest logs for any additional 2025 rookies still hitting `player_not_found`.
+
+### Next
+- Extend `_HARDCODED_PLAYER_ID_FALLBACKS` if new rookies appear before `nba_api` static data catches up.
+
+---
+
 ## 2026-04-14 (Injury Ingest Name Resolution Fix)
 
 ### Done
