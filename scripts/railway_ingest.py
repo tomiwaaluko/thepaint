@@ -58,7 +58,9 @@ async def main_async() -> bool:
     # 1. Seed game records for yesterday so subsequent steps can find them
     await run_step(
         "seed_yesterday_games",
-        with_session(lambda s: ingest_today_scoreboard(s, yesterday)),
+        with_session(
+            lambda s: ingest_today_scoreboard(s, yesterday, raise_on_fetch_failure=True)
+        ),
     )
 
     # 2. Ingest team + player box scores for yesterday's games
@@ -118,7 +120,9 @@ async def main_async() -> bool:
     # 3. Seed today's game records so the prediction cron can find them
     await run_step(
         "seed_today_games",
-        with_session(lambda s: ingest_today_scoreboard(s, today)),
+        with_session(
+            lambda s: ingest_today_scoreboard(s, today, raise_on_fetch_failure=True)
+        ),
     )
 
     # 4. Refresh injury report

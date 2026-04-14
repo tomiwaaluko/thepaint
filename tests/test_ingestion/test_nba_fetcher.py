@@ -186,11 +186,13 @@ class TestFetchWithBackoff:
 
 class TestFetchWithBackoffProxy:
     @pytest.mark.asyncio
-    async def test_passes_proxy_when_nba_proxy_url_set(self, monkeypatch, tmp_path):
+    async def test_passes_proxy_when_nba_proxy_url_set(self, monkeypatch):
         """When NBA_PROXY_URL is configured, it should be forwarded to the endpoint."""
         import chalk.ingestion.nba_fetcher as mod
 
-        monkeypatch.setattr(mod, "CACHE_DIR", tmp_path)
+        local_tmp_path = Path(".cache/test_nba_fetcher") / str(uuid4())
+        local_tmp_path.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(mod, "CACHE_DIR", local_tmp_path)
         monkeypatch.setattr(mod.settings, "NBA_PROXY_URL", "http://proxy.example.com:8080")
 
         captured = {}
@@ -212,11 +214,13 @@ class TestFetchWithBackoffProxy:
         assert result == {"data": "live"}
 
     @pytest.mark.asyncio
-    async def test_no_proxy_when_nba_proxy_url_empty(self, monkeypatch, tmp_path):
+    async def test_no_proxy_when_nba_proxy_url_empty(self, monkeypatch):
         """When NBA_PROXY_URL is empty, proxy should be None."""
         import chalk.ingestion.nba_fetcher as mod
 
-        monkeypatch.setattr(mod, "CACHE_DIR", tmp_path)
+        local_tmp_path = Path(".cache/test_nba_fetcher") / str(uuid4())
+        local_tmp_path.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(mod, "CACHE_DIR", local_tmp_path)
         monkeypatch.setattr(mod.settings, "NBA_PROXY_URL", "")
 
         captured = {}
@@ -265,13 +269,47 @@ class TestIngestTodayScoreboard:
             mod.scoreboardv2.ScoreboardV2,
             {"game_date": "01/15/2024", "day_offset": 0, "league_id": "00"},
             endpoint_name="ScoreboardV2",
+            request_timeout=mod.SCOREBOARD_REQUEST_TIMEOUT,
         )
         upsert_mock.assert_awaited_once()
         sleep_mock.assert_awaited()
         assert count == 1
 
     @pytest.mark.asyncio
-    async def test_returns_zero_if_scoreboard_fetch_fails(self):
+    async def test_uses_cdn_fallback_if_scoreboardv2_fails(self):
+        import chalk.ingestion.nba_fetcher as mod
+
+        mock_session = AsyncMock()
+        sample = {
+            "GameHeader": [
+                {
+                    "GAME_ID": "0022301234",
+                    "HOME_TEAM_ID": 1610612747,
+                    "VISITOR_TEAM_ID": 1610612744,
+                }
+            ]
+        }
+
+        with (
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_with_backoff",
+                new=AsyncMock(side_effect=IngestError("timeout")),
+            ),
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_scoreboard_from_cdn",
+                new=AsyncMock(return_value=sample),
+            ) as cdn_mock,
+            patch("chalk.ingestion.nba_fetcher.upsert_games", new=AsyncMock()) as upsert_mock,
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()),
+        ):
+            count = await ingest_today_scoreboard(mock_session, date(2024, 1, 15))
+
+        cdn_mock.assert_awaited_once_with(date(2024, 1, 15))
+        upsert_mock.assert_awaited_once()
+        assert count == 1
+
+    @pytest.mark.asyncio
+    async def test_raises_if_fallback_fails_in_strict_mode(self):
         mock_session = AsyncMock()
 
         with (
@@ -279,11 +317,18 @@ class TestIngestTodayScoreboard:
                 "chalk.ingestion.nba_fetcher._fetch_with_backoff",
                 new=AsyncMock(side_effect=IngestError("timeout")),
             ),
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_scoreboard_from_cdn",
+                new=AsyncMock(side_effect=RuntimeError("cdn timeout")),
+            ),
             patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()),
+            pytest.raises(IngestError, match="Scoreboard fetch failed"),
         ):
-            count = await ingest_today_scoreboard(mock_session, date(2024, 1, 15))
-
-        assert count == 0
+            await ingest_today_scoreboard(
+                mock_session,
+                date(2024, 1, 15),
+                raise_on_fetch_failure=True,
+            )
 
 
 class TestIngestPlayerSeason:
