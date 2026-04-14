@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from chalk.ingestion import injury_fetcher
-from chalk.ingestion.injury_fetcher import get_player_status, ingest_injuries, resolve_player_id
+from chalk.ingestion.injury_fetcher import (
+    _filter_valid_player_ids,
+    get_player_status,
+    ingest_injuries,
+    resolve_player_id,
+)
 
 
 SAMPLE_ESPN_RESPONSE = {
@@ -109,6 +114,33 @@ class TestResolvePlayerId:
         with patch("chalk.ingestion.injury_fetcher._get_static_player_lookup", return_value={}):
             player_id = await resolve_player_id(mock_session, "LJ Cryer")
             assert player_id == 1641940
+
+
+class TestFilterValidPlayerIds:
+    @pytest.mark.asyncio
+    async def test_filters_out_missing_player_ids(self):
+        """Rows with player_ids not in the players table should be removed."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        # Only player 100 exists in the players table
+        mock_result.fetchall.return_value = [(100,)]
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        rows = [
+            {"player_id": 100, "report_date": date(2026, 4, 14), "status": "Out", "description": "Knee", "source": "espn"},
+            {"player_id": 999, "report_date": date(2026, 4, 14), "status": "Out", "description": "Ankle", "source": "espn"},
+        ]
+        filtered = await _filter_valid_player_ids(mock_session, rows)
+        assert len(filtered) == 1
+        assert filtered[0]["player_id"] == 100
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_empty_input(self):
+        """Empty input should return empty output without querying."""
+        mock_session = AsyncMock()
+        filtered = await _filter_valid_player_ids(mock_session, [])
+        assert filtered == []
+        mock_session.execute.assert_not_called()
 
 
 class TestIngestInjuries:

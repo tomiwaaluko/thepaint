@@ -86,8 +86,27 @@ async def resolve_player_id(session: AsyncSession, display_name: str) -> int | N
     return None
 
 
+async def _filter_valid_player_ids(
+    session: AsyncSession, rows: list[dict]
+) -> list[dict]:
+    """Remove rows whose player_id does not exist in the players table."""
+    if not rows:
+        return rows
+    unique_ids = {r["player_id"] for r in rows}
+    result = await session.execute(
+        select(Player.player_id).where(Player.player_id.in_(unique_ids))
+    )
+    existing_ids = {row[0] for row in result.fetchall()}
+    missing_ids = unique_ids - existing_ids
+    if missing_ids:
+        for pid in missing_ids:
+            log.warning("injury_skipped_missing_player", player_id=pid)
+    return [r for r in rows if r["player_id"] in existing_ids]
+
+
 async def upsert_injuries(session: AsyncSession, rows: list[dict]) -> int:
     """Upsert injury rows. Returns count of rows affected."""
+    rows = await _filter_valid_player_ids(session, rows)
     if not rows:
         return 0
 

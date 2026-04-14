@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-04-14 (Injury Ingest FK Crash Fix)
+
+### Done
+- Added `_filter_valid_player_ids()` to `chalk/ingestion/injury_fetcher.py` — queries `players` table before bulk upsert and drops rows whose `player_id` has no FK match
+- Prevents `ForeignKeyViolationError` crash when hardcoded/static-resolved player IDs (e.g. LJ Cryer=1641940, Adama Bal=1642380) don't exist in `players`
+- Added 2 tests for the FK filter (missing-player filtering, empty-input passthrough)
+- Updated CLAUDE.md with production deployment notes (railway branch policy, Airflow local-only, injury fetcher tiers, ScoreboardV2 CDN fallback, validate_row_counts warn behavior)
+
+### Metrics
+- 9/9 injury fetcher tests pass
+
+### Pending
+- Players resolved from static/hardcoded fallback still won't have injury data tracked until they exist in `players` table
+
+### Next
+- Consider auto-inserting minimal `players` rows for fallback-resolved IDs so their injuries are captured
+
+---
+
 ## 2026-04-14 (Railway Ingest Validation Crash Guard)
 
 ### Done
