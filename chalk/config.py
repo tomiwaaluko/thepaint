@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"
     LOG_LEVEL: str = "INFO"
     NBA_API_CACHE_DIR: Path = Path(".cache/nba_api")
+    NBA_PLAYER_DELAY_MIN_SECONDS: float = 3.0
+    NBA_PLAYER_DELAY_MAX_SECONDS: float = 5.0
+    NBA_API_BACKOFF_BASE_SECONDS: float = 8.0
+    NBA_API_MAX_BACKOFF_SECONDS: float = 120.0
+    FAILED_PLAYER_INGEST_LOG: Path = Path(".cache/failed_player_ingest.jsonl")
     # Comma-separated list of allowed CORS origins.
     # Override in production via ALLOWED_ORIGINS env var.
     ALLOWED_ORIGINS: str = "https://thepaint-production.up.railway.app,http://localhost:5173"

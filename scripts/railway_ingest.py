@@ -25,11 +25,13 @@ async def main_async() -> bool:
 
     from chalk.db.models import Game, Player, PlayerGameLog
     from chalk.db.session import async_session_factory
+    from chalk.exceptions import IngestError
     from chalk.ingestion.injury_fetcher import ingest_injuries
     from chalk.ingestion.nba_fetcher import (
         ingest_player_season,
         ingest_team_season,
         ingest_today_scoreboard,
+        record_failed_player_ingest,
     )
 
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
@@ -101,6 +103,11 @@ async def main_async() -> bool:
                 pc = await ingest_player_season(session, pid, season)
                 player_count += pc
             except Exception as e:
+                if not isinstance(e, IngestError):
+                    try:
+                        record_failed_player_ingest(pid, season, str(e))
+                    except Exception:
+                        pass
                 log.error("player_ingest_failed", player_id=pid, error=str(e))
 
         log.info("yesterday_stats_done", player_rows=player_count, date=str(yesterday))

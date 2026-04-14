@@ -1,5 +1,8 @@
 """Tests for NBAFetcher ingestion functions."""
+import json
 from datetime import date
+from pathlib import Path
+from uuid import uuid4
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,6 +13,7 @@ from chalk.ingestion.nba_fetcher import (
     _parse_minutes,
     _parse_matchup,
     _fetch_with_backoff,
+    ingest_today_scoreboard,
     ingest_player_season,
     ingest_team_season,
 )
@@ -104,17 +108,23 @@ class TestFetchWithBackoff:
             def __init__(self, **kwargs):
                 raise ConnectionError("nba_api is down")
 
-        with pytest.raises(IngestError, match="Permanent failure"):
-            await _fetch_with_backoff(
-                FailingEndpoint,
-                {"player_id": 2544},
-                "TestEndpoint",
-            )
+        with (
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+            patch("chalk.ingestion.nba_fetcher.random.uniform", return_value=0.0),
+            pytest.raises(IngestError, match="Permanent failure"),
+        ):
+            await _fetch_with_backoff(FailingEndpoint, {"player_id": 2544}, "TestEndpoint")
+
+        delays = [call.args[0] for call in sleep_mock.await_args_list if call.args]
+        assert any(delay >= 60 for delay in delays)
 
     @pytest.mark.asyncio
-    async def test_uses_cache(self, tmp_path, monkeypatch):
+    async def test_uses_cache(self, monkeypatch):
         """Verify cached response is returned without hitting the endpoint."""
         import chalk.ingestion.nba_fetcher as mod
+
+        tmp_path = Path(".cache/test_nba_fetcher") / str(uuid4())
+        tmp_path.mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(mod, "CACHE_DIR", tmp_path)
 
         cache_dir = tmp_path / "TestEndpoint"
@@ -143,6 +153,67 @@ class TestFetchWithBackoff:
         assert result == {"data": "cached"}
         assert call_count == 0
 
+    @pytest.mark.asyncio
+    async def test_logs_failed_player_ids_for_targeted_retry(self, monkeypatch):
+        import chalk.ingestion.nba_fetcher as mod
+
+        tmp_path = Path(".cache/test_nba_fetcher") / str(uuid4())
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        failed_log = tmp_path / "failed_player_ingest.jsonl"
+        monkeypatch.setattr(mod, "FAILED_PLAYER_LOG", failed_log)
+
+        class FailingEndpoint:
+            def __init__(self, **kwargs):
+                raise TimeoutError("timed out")
+
+        with (
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()),
+            patch("chalk.ingestion.nba_fetcher.random.uniform", return_value=0.0),
+            pytest.raises(IngestError, match="Permanent failure"),
+        ):
+            await _fetch_with_backoff(
+                FailingEndpoint,
+                {"player_id": 2544, "season": "2023-24"},
+                "PlayerGameLog",
+            )
+
+        assert failed_log.exists()
+        payload = json.loads(failed_log.read_text(encoding="utf-8").strip())
+        assert payload["player_id"] == 2544
+        assert payload["season"] == "2023-24"
+        assert "timed out" in payload["error"]
+
+
+class TestIngestTodayScoreboard:
+    @pytest.mark.asyncio
+    async def test_uses_shared_fetch_path(self):
+        import chalk.ingestion.nba_fetcher as mod
+
+        mock_session = AsyncMock()
+        sample = {
+            "GameHeader": [
+                {
+                    "GAME_ID": "0022301234",
+                    "HOME_TEAM_ID": 1610612747,
+                    "VISITOR_TEAM_ID": 1610612744,
+                }
+            ]
+        }
+
+        with (
+            patch("chalk.ingestion.nba_fetcher._fetch_with_backoff", new=AsyncMock(return_value=sample)) as fetch_mock,
+            patch("chalk.ingestion.nba_fetcher.upsert_games", new=AsyncMock()) as upsert_mock,
+        ):
+            count = await ingest_today_scoreboard(mock_session, date(2024, 1, 15))
+
+        fetch_mock.assert_awaited_once_with(
+            mod.scoreboardv2.ScoreboardV2,
+            {"game_date": "01/15/2024", "day_offset": 0, "league_id": "00"},
+            endpoint_name="ScoreboardV2",
+        )
+        upsert_mock.assert_awaited_once()
+        assert count == 1
+
 
 class TestIngestPlayerSeason:
     @pytest.mark.asyncio
@@ -154,12 +225,14 @@ class TestIngestPlayerSeason:
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_session.commit = AsyncMock()
 
-        with patch(
-            "chalk.ingestion.nba_fetcher._fetch_with_backoff",
-            return_value=SAMPLE_PLAYER_LOG,
+        with (
+            patch("chalk.ingestion.nba_fetcher._fetch_with_backoff", return_value=SAMPLE_PLAYER_LOG),
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()) as sleep_mock,
+            patch("chalk.ingestion.nba_fetcher.random.uniform", return_value=4.0),
         ):
             count = await ingest_player_season(mock_session, player_id=2544, season="2023-24")
             assert count == 1
+        sleep_mock.assert_awaited()
 
     @pytest.mark.asyncio
     async def test_idempotent_call(self):
@@ -170,9 +243,9 @@ class TestIngestPlayerSeason:
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_session.commit = AsyncMock()
 
-        with patch(
-            "chalk.ingestion.nba_fetcher._fetch_with_backoff",
-            return_value=SAMPLE_PLAYER_LOG,
+        with (
+            patch("chalk.ingestion.nba_fetcher._fetch_with_backoff", return_value=SAMPLE_PLAYER_LOG),
+            patch("chalk.ingestion.nba_fetcher.asyncio.sleep", new=AsyncMock()),
         ):
             count1 = await ingest_player_season(mock_session, player_id=2544, season="2023-24")
             count2 = await ingest_player_season(mock_session, player_id=2544, season="2023-24")
