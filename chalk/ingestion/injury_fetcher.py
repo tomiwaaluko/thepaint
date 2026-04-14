@@ -1,7 +1,10 @@
 from datetime import date, datetime
+import re
+from functools import lru_cache
 
 import httpx
 import structlog
+from nba_api.stats.static import players as nba_static_players
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,17 +15,57 @@ from chalk.exceptions import IngestError
 log = structlog.get_logger()
 
 ESPN_INJURY_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries"
+_SUFFIX_TOKENS = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"}
+
+
+def _normalize_player_name(name: str) -> str:
+    """Normalize player names for resilient matching across punctuation/suffix variants."""
+    cleaned = re.sub(r"[^a-z0-9\s]", "", name.lower())
+    tokens = [token for token in cleaned.split() if token not in _SUFFIX_TOKENS]
+    return " ".join(tokens)
+
+
+@lru_cache(maxsize=1)
+def _get_static_player_lookup() -> dict[str, tuple[int, str]]:
+    """
+    Build a normalized-name -> (player_id, full_name) map from nba_api static players.
+    Prefer active players when duplicate normalized names exist.
+    """
+    lookup: dict[str, tuple[int, str]] = {}
+    for player in nba_static_players.get_players():
+        normalized = _normalize_player_name(player["full_name"])
+        if not normalized:
+            continue
+
+        existing = lookup.get(normalized)
+        if existing is None or player.get("is_active", False):
+            lookup[normalized] = (int(player["id"]), player["full_name"])
+    return lookup
 
 
 async def resolve_player_id(session: AsyncSession, display_name: str) -> int | None:
-    """Look up player_id by name. Returns None if not found."""
+    """Look up player_id by name using DB first, then nba_api static fallback."""
     result = await session.execute(
         select(Player.player_id).where(Player.name == display_name)
     )
     row = result.scalar_one_or_none()
-    if row is None:
-        log.warning("player_not_found", name=display_name)
-    return row
+    if row is not None:
+        return row
+
+    normalized_name = _normalize_player_name(display_name)
+    static_match = _get_static_player_lookup().get(normalized_name)
+    if static_match is not None:
+        player_id, matched_name = static_match
+        log.info(
+            "player_resolved_from_static",
+            name=display_name,
+            matched_name=matched_name,
+            player_id=player_id,
+        )
+        return player_id
+
+    log.warning("player_not_found", name=display_name)
+    return None
 
 
 async def upsert_injuries(session: AsyncSession, rows: list[dict]) -> int:

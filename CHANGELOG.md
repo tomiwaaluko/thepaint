@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-04-14 (Injury Ingest Name Resolution Fix)
+
+### Done
+- Restored fallback player resolution in `chalk/ingestion/injury_fetcher.py` using `nba_api.stats.static.players` when direct DB name match fails.
+- Added normalized name matching (lowercase, punctuation stripped, Jr./III-style suffix removal) to resolve variants such as `Jimmy Butler III`, `T.J. McConnell`, and `Day'Ron Sharpe`.
+- Added `player_resolved_from_static` logging when static fallback resolves a player; `player_not_found` now only logs after both DB and static lookup fail.
+- Follow-up refinement: clarified `resolve_player_id` no-match return to explicit `None` and strengthened fallback tests to patch `nba_static_players.get_players` (exercising real lookup-building + cache behavior).
+- Added/updated tests in `tests/test_ingestion/test_injury_fetcher.py` for DB-first resolution, static fallback resolution, and no-match behavior.
+
+### Metrics
+- `pytest tests/test_ingestion/test_injury_fetcher.py -v` passed: 6/6 tests.
+
+### Pending
+- Validate the next production ingest run to confirm `player_not_found` noise is eliminated for known NBA players.
+
+### Next
+- If any remaining misses appear in production logs, extend normalization rules for additional edge-case suffix/name patterns.
+
+---
+
 ## 2026-04-14
 
 ### Done
