@@ -1,9 +1,9 @@
 """Stacking meta-learner: blends XGBoost + LightGBM + historical median."""
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import joblib
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import structlog
@@ -12,17 +12,6 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error
 
 from chalk.models.validation import TRAIN_SEASONS, get_feature_cols
-
-if TYPE_CHECKING:
-    import lightgbm as lgb
-else:
-    try:
-        import lightgbm as lgb
-    except (OSError, ImportError) as e:
-        lgb = None  # type: ignore
-        _LGBM_IMPORT_ERROR = e
-    else:
-        _LGBM_IMPORT_ERROR = None
 
 log = structlog.get_logger()
 
@@ -33,7 +22,7 @@ class StackedEnsemble:
 
     stat: str
     xgb_model: xgb.XGBRegressor | None = None
-    lgbm_model: "lgb.LGBMRegressor | None" = None
+    lgbm_model: lgb.LGBMRegressor | None = None
     meta_model: Ridge | None = None
     xgb_params: dict = field(default_factory=dict)
     lgbm_params: dict = field(default_factory=dict)
@@ -51,11 +40,6 @@ class StackedEnsemble:
 
         Returns dict with per-model and ensemble metrics.
         """
-        if lgb is None:
-            raise ImportError(
-                f"LightGBM is not available: {_LGBM_IMPORT_ERROR}. "
-                "This may be due to a missing system library (libgomp.so.1)."
-            )
         self.xgb_params = xgb_params
         self.lgbm_params = lgbm_params
         self.meta_alpha = meta_alpha

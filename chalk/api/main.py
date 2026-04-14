@@ -8,7 +8,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from chalk.api.routes import fantasy, games, health, players, props, recap, teams
+from chalk.api.routes import fantasy, games, health, players, props, teams
 from chalk.config import settings
 from chalk.exceptions import FeatureError, IngestError, PredictionError
 
@@ -54,8 +54,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Content-Type", "Authorization", "X-Invalidation-Token"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Include routers
@@ -65,7 +65,6 @@ app.include_router(teams.router)
 app.include_router(games.router)
 app.include_router(props.router)
 app.include_router(fantasy.router)
-app.include_router(recap.router)
 
 
 @app.exception_handler(FeatureError)

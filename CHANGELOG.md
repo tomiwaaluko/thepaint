@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-04-14
+
+### Done
+- Reverted the `railway` branch back to commit `3b88695d0d1f31f07e03415216e9af09eebb5dd5` (security hardening baseline) due to post-deploy crashes.
+- Rolled back all subsequent API, ingestion, dashboard, model, script, and test changes introduced after that commit.
+
+### Metrics
+- Attempted `git revert --no-commit 3b88695d0d1f31f07e03415216e9af09eebb5dd5..HEAD`; it failed on a merge commit requiring mainline selection.
+- Completed equivalent merge-aware no-commit reverts for the same range, resulting in a single rollback commit target.
+
+### Pending
+- Validate Railway redeploy and run production smoke checks after push.
+
+### Next
+- Isolate the post-deploy crash root cause from reverted commits and reintroduce fixes incrementally.
+
+---
+
 ## 2026-03-16 (Session 8)
 
 ### Done

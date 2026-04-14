@@ -5,7 +5,6 @@ import type {
   OverUnderLine,
   PlayerGameLog,
   PlayerPrediction,
-  RecapResponse,
   TodayGamesResponse,
 } from "../types/chalk";
 
@@ -76,10 +75,5 @@ export const chalkApi = {
     return fetchJson(
       `/v1/games/${gameId}/fantasy?platform=${platform}`
     );
-  },
-
-  getRecap(date?: string): Promise<RecapResponse> {
-    const params = date ? `?date=${date}` : "";
-    return fetchJson(`/v1/games/recap${params}`);
   },
 };

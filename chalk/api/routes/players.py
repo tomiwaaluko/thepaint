@@ -1,6 +1,5 @@
 """Player prediction routes."""
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timezone
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -16,8 +15,6 @@ from chalk.predictions.player import predict_player
 
 router = APIRouter(prefix="/v1/players", tags=["players"])
 
-ET_TZ = ZoneInfo("America/New_York")
-
 
 @router.get("/{player_id}/predict", response_model=PlayerPredictionResponse)
 async def predict_player_statline(
@@ -27,14 +24,15 @@ async def predict_player_statline(
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> PlayerPredictionResponse:
-    as_of_date = as_of.astimezone(ET_TZ).date() if as_of else datetime.now(ET_TZ).date()
-    if as_of_date > datetime.now(ET_TZ).date():
-        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
-
-    cache_key = f"pred:player:{player_id}:game:{game_id}:as_of:{as_of_date}"
+    # Check cache
+    cache_key = f"pred:player:{player_id}:game:{game_id}"
     cached = await get_cached(redis, cache_key, PlayerPredictionResponse)
     if cached:
         return cached
+
+    as_of_date = as_of.date() if as_of else date.today()
+    if as_of_date > date.today():
+        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
 
     try:
         response = await predict_player(session, player_id, game_id, as_of_date)
