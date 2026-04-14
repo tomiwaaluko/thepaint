@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-04-14 (Railway Ingest Validation Crash Guard)
+
+### Done
+- Updated `scripts/railway_ingest.py::validate_row_counts` so `log_count == 0` now emits `validation_failed_no_player_logs` as a warning and returns, instead of raising a `RuntimeError` that crashes the service.
+- Marked the ingest run as failed (`failed = True`) in that warning path so the cron still exits with status code `1` after completion.
+
+### Metrics
+- Validation behavior changed from exception-based crash to warning + failure flag for missing yesterday `player_game_logs`.
+
+### Pending
+- Verify the next Railway ingest cron run reports the warning and exits non-zero without mid-run service crash when stats ingestion is skipped/timeouts occur.
+
+### Next
+- Monitor `validation_failed_no_player_logs` frequency and pair with ScoreboardV2 timeout telemetry to reduce missed-stat ingest windows.
+
+---
+
 ## 2026-04-14 (Injury Unicode + Rookie Fallback Fix)
 
 ### Done
