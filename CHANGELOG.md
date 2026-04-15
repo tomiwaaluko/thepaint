@@ -1,5 +1,97 @@
 # Changelog
 
+## 2026-04-14 (Injury Ingest FK Crash Fix)
+
+### Done
+- Added `_filter_valid_player_ids()` to `chalk/ingestion/injury_fetcher.py` — queries `players` table before bulk upsert and drops rows whose `player_id` has no FK match
+- Prevents `ForeignKeyViolationError` crash when hardcoded/static-resolved player IDs (e.g. LJ Cryer=1641940, Adama Bal=1642380) don't exist in `players`
+- Added 2 tests for the FK filter (missing-player filtering, empty-input passthrough)
+- Updated CLAUDE.md with production deployment notes (railway branch policy, Airflow local-only, injury fetcher tiers, ScoreboardV2 CDN fallback, validate_row_counts warn behavior)
+
+### Metrics
+- 9/9 injury fetcher tests pass
+
+### Pending
+- Players resolved from static/hardcoded fallback still won't have injury data tracked until they exist in `players` table
+
+### Next
+- Consider auto-inserting minimal `players` rows for fallback-resolved IDs so their injuries are captured
+
+---
+
+## 2026-04-14 (Railway Ingest Validation Crash Guard)
+
+### Done
+- Updated `scripts/railway_ingest.py::validate_row_counts` so `log_count == 0` now emits `validation_failed_no_player_logs` as a warning and returns, instead of raising a `RuntimeError` that crashes the service.
+- Marked the ingest run as failed (`failed = True`) in that warning path so the cron still exits with status code `1` after completion.
+
+### Metrics
+- Validation behavior changed from exception-based crash to warning + failure flag for missing yesterday `player_game_logs`.
+
+### Pending
+- Verify the next Railway ingest cron run reports the warning and exits non-zero without mid-run service crash when stats ingestion is skipped/timeouts occur.
+
+### Next
+- Monitor `validation_failed_no_player_logs` frequency and pair with ScoreboardV2 timeout telemetry to reduce missed-stat ingest windows.
+
+---
+
+## 2026-04-14 (Injury Unicode + Rookie Fallback Fix)
+
+### Done
+- Updated `chalk/ingestion/injury_fetcher.py::_normalize_player_name` to strip Unicode diacritics via `unicodedata.normalize("NFKD", ...)` before punctuation/suffix cleanup, so names like `Dončić`, `Vučević`, and `Jović` normalize to ASCII equivalents.
+- Added hardcoded rookie fallback IDs for unresolved 2025 names currently missing from `nba_api` static list resolution (`LJ Cryer`, `Adama Bal`) after DB + static lookup miss.
+- Added resolver test coverage for diacritic-insensitive static matching (`Luka Dončić` vs `Luka Doncic`) and hardcoded rookie fallback behavior.
+
+### Metrics
+- `pytest tests/test_ingestion/test_injury_fetcher.py -v` passed: 7/7 tests.
+
+### Pending
+- Monitor production ingest logs for any additional 2025 rookies still hitting `player_not_found`.
+
+### Next
+- Extend `_HARDCODED_PLAYER_ID_FALLBACKS` if new rookies appear before `nba_api` static data catches up.
+
+---
+
+## 2026-04-14 (Injury Ingest Name Resolution Fix)
+
+### Done
+- Restored fallback player resolution in `chalk/ingestion/injury_fetcher.py` using `nba_api.stats.static.players` when direct DB name match fails.
+- Added normalized name matching (lowercase, punctuation stripped, Jr./III-style suffix removal) to resolve variants such as `Jimmy Butler III`, `T.J. McConnell`, and `Day'Ron Sharpe`.
+- Added `player_resolved_from_static` logging when static fallback resolves a player; `player_not_found` now only logs after both DB and static lookup fail.
+- Follow-up refinement: clarified `resolve_player_id` no-match return to explicit `None` and strengthened fallback tests to patch `nba_static_players.get_players` (exercising real lookup-building + cache behavior).
+- Added/updated tests in `tests/test_ingestion/test_injury_fetcher.py` for DB-first resolution, static fallback resolution, and no-match behavior.
+
+### Metrics
+- `pytest tests/test_ingestion/test_injury_fetcher.py -v` passed: 6/6 tests.
+
+### Pending
+- Validate the next production ingest run to confirm `player_not_found` noise is eliminated for known NBA players.
+
+### Next
+- If any remaining misses appear in production logs, extend normalization rules for additional edge-case suffix/name patterns.
+
+---
+
+## 2026-04-14
+
+### Done
+- Reverted the `railway` branch back to commit `3b88695d0d1f31f07e03415216e9af09eebb5dd5` (security hardening baseline) due to post-deploy crashes.
+- Rolled back all subsequent API, ingestion, dashboard, model, script, and test changes introduced after that commit.
+
+### Metrics
+- Attempted `git revert --no-commit 3b88695d0d1f31f07e03415216e9af09eebb5dd5..HEAD`; it failed on a merge commit requiring mainline selection.
+- Completed equivalent merge-aware no-commit reverts for the same range, resulting in a single rollback commit target.
+
+### Pending
+- Validate Railway redeploy and run production smoke checks after push.
+
+### Next
+- Isolate the post-deploy crash root cause from reverted commits and reintroduce fixes incrementally.
+
+---
+
 ## 2026-03-16 (Session 8)
 
 ### Done

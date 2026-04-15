@@ -111,23 +111,15 @@ async def get_today_games(
 
 @router.delete("/{game_id}/cache")
 async def clear_game_cache(
-    game_id: str = Path(..., pattern=r"^[0-9]{10}$", description="NBA game ID"),
+    game_id: str,
     x_invalidation_token: str | None = Header(None, alias="X-Invalidation-Token"),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
     """Clear cached prediction for a game. Requires X-Invalidation-Token header."""
-    import secrets
     token = settings.CACHE_INVALIDATION_TOKEN
-    if not token or not secrets.compare_digest(x_invalidation_token or "", token):
+    if not token or x_invalidation_token != token:
         raise HTTPException(status_code=403, detail="Invalid or missing invalidation token")
-    deleted = 0
-    cursor = 0
-    while True:
-        cursor, keys = await redis.scan(cursor, match=f"pred:game:{game_id}:*", count=100)
-        if keys:
-            deleted += await redis.delete(*keys)
-        if cursor == 0:
-            break
+    deleted = await redis.delete(f"pred:game:{game_id}")
     return {"game_id": game_id, "cleared": deleted > 0}
 
 
@@ -139,23 +131,23 @@ async def predict_game(
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> GamePredictionResponse:
-    # Load game first to resolve as_of_date default
-    result = await session.execute(select(Game).where(Game.game_id == game_id))
-    game = result.scalar_one_or_none()
-    if not game:
-        raise HTTPException(status_code=404, detail=f"Game {game_id} not found")
-
-    as_of_date = as_of.astimezone(ET_TZ).date() if as_of else game.date
-    if as_of and as_of_date > datetime.now(ET_TZ).date():
-        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
-
-    cache_key = f"pred:game:{game_id}:as_of:{as_of_date}"
+    cache_key = f"pred:game:{game_id}"
     if nocache:
         await redis.delete(cache_key)
     else:
         cached = await get_cached(redis, cache_key, GamePredictionResponse)
         if cached:
             return cached
+
+    # Load game
+    result = await session.execute(select(Game).where(Game.game_id == game_id))
+    game = result.scalar_one_or_none()
+    if not game:
+        raise HTTPException(status_code=404, detail=f"Game {game_id} not found")
+
+    as_of_date = as_of.date() if as_of else game.date
+    if as_of and as_of_date > date.today():
+        raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
 
     # Get team names
     home_team = await session.get(Team, game.home_team_id)

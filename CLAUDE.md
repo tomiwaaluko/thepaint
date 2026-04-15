@@ -173,12 +173,25 @@ This enables independent feature sets and easier debugging per stat.
 2. **Feature engineering** produces 60+ features per player-game: rolling averages (5/10/20 game), opponent defensive profiles, injury context, usage/role features, situational context
 3. **Training** uses time-series walk-forward validation (never leak future data)
 4. **Serving** via FastAPI with Redis caching (15-min TTL, refreshed on injury updates)
-5. **Scheduling** via Airflow DAGs: daily data pull at 8 AM ET, predictions at 6 PM ET
+5. **Scheduling** via Railway Cron Jobs (production): `scripts/railway_ingest.py` at 07:00 UTC, `scripts/railway_predict.py` at 18:00 UTC. Airflow DAGs (`airflow/dags/`) remain for local development only — Airflow is not used in production.
 
 ### Key Design Decisions
 - XGBoost over deep learning: tabular regression on <1M rows favors gradient boosted trees
 - Opportunity Score (projected minutes x usage rate) is the single most predictive feature — must be recalculated at prediction time using current injury news
 - Weight recent games 3x vs older games in training to handle role/age changes
+
+### Ingestion Behaviors
+
+**Injury fetcher — three-tier player resolution (`chalk/ingestion/injury_fetcher.py`):**
+1. **DB lookup** — query `players` table by normalized name (lowercase, punctuation stripped, Jr./III suffixes removed).
+2. **nba_api static fallback** — if DB misses, search `nba_api.stats.static.players` using the same normalization plus Unicode diacritic stripping (`unicodedata.normalize("NFKD", ...)` → ASCII). Logs `player_resolved_from_static` on success.
+3. **Hardcoded rookie fallback** — if both lookups miss (e.g. 2025 rookies not yet in the nba_api static list), resolve from `_HARDCODED_PLAYER_ID_FALLBACKS` dict. Extend this dict when new names hit `player_not_found`.
+
+**ScoreboardV2 timeout + CDN fallback:**
+`ScoreboardV2` intermittently times out on Railway. A CDN fallback exists that retries via the NBA CDN endpoint. Do not remove this fallback path.
+
+**`validate_row_counts` — warn, don't raise:**
+When yesterday's `player_game_logs` count is zero (e.g. stats ingestion was skipped or timed out), `validate_row_counts` emits a `validation_failed_no_player_logs` warning and sets `failed = True` rather than raising a `RuntimeError`. The cron still exits with code `1` after completion.
 
 ## Naming Conventions
 
@@ -243,6 +256,7 @@ The project runs on Railway (production) with the following service layout:
 Database: **Supabase PostgreSQL** via Session Pooler (NOT direct connection — IPv4 incompatible on Railway).
 
 Key production rules:
+- **All changes must be pushed to the `railway` branch, not `main`**
 - Always use `DOCKERFILE` builder for Python services — Railpack will miss the `chalk` package
 - Cron services share the same Docker image as `web` — same Dockerfile, different start command
 - Service-to-service calls use Railway private networking: `http://web.railway.internal:8000`

@@ -137,6 +137,7 @@ async def main_async() -> bool:
 
     # 6. Validate: if games existed yesterday, player logs must exist
     async def validate_row_counts(session):
+        nonlocal failed
         game_result = await session.execute(
             select(func.count()).select_from(Game).where(Game.date == yesterday)
         )
@@ -154,9 +155,13 @@ async def main_async() -> bool:
         log_count = log_result.scalar()
 
         if log_count == 0:
-            raise RuntimeError(
-                f"Games existed on {yesterday} but 0 player_game_logs ingested"
+            log.warning(
+                "validation_failed_no_player_logs",
+                games=game_count,
+                date=str(yesterday),
             )
+            failed = True
+            return
 
         log.info("validation_passed", player_logs=log_count, games=game_count, date=str(yesterday))
 

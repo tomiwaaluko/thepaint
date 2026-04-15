@@ -100,20 +100,12 @@ export default function LandingPage() {
             <Activity className="w-6 h-6 text-[#E8531A]" />
             <span className="text-xl font-bold tracking-tight">Chalk</span>
           </div>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/recap"
-              className="text-sm font-medium text-[#94A3B8] hover:text-white transition-colors"
-            >
-              Recap
-            </Link>
-            <Link
-              to="/dashboard"
-              className="text-sm font-medium text-[#94A3B8] hover:text-white transition-colors"
-            >
-              Sign In
-            </Link>
-          </div>
+          <Link
+            to="/dashboard"
+            className="text-sm font-medium text-[#94A3B8] hover:text-white transition-colors"
+          >
+            Sign In
+          </Link>
         </div>
       </nav>
 
