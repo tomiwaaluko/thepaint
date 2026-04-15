@@ -24,10 +24,10 @@ _PLAYER_ID_TO_NAME: dict[int, str] = {
 log = structlog.get_logger()
 
 CACHE_DIR = Path(settings.NBA_API_CACHE_DIR)
-MAX_RETRIES = 5
+MAX_RETRIES = settings.NBA_API_MAX_RETRIES
 BASE_DELAY = 2.0
 BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
-REQUEST_TIMEOUT = 60  # seconds — stats.nba.com can be slow from cloud IPs
+REQUEST_TIMEOUT = settings.NBA_API_TIMEOUT
 
 # Browser-like headers required by stats.nba.com.
 # stats.nba.com is typically accessed via nba.com links, so Origin/Referer must

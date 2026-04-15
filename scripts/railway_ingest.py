@@ -100,13 +100,31 @@ async def main_async() -> bool:
             )
             player_ids = [r[0] for r in p_result.all()]
 
+        # Circuit breaker: if N consecutive players fail, nba_api is likely
+        # unreachable from this IP — skip remaining to avoid burning hours.
+        CIRCUIT_BREAKER_THRESHOLD = 3
+        consecutive_failures = 0
+
         for pid in player_ids:
+            if consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD:
+                skipped = len(player_ids) - player_ids.index(pid)
+                log.error(
+                    "circuit_breaker_tripped",
+                    consecutive_failures=consecutive_failures,
+                    skipped_players=skipped,
+                    msg="nba_api appears unreachable — skipping remaining players",
+                )
+                break
+
             try:
                 async with async_session_factory() as session:
                     pc = await ingest_player_season(session, pid, season)
                 player_count += pc
+                consecutive_failures = 0  # reset on success
             except Exception as e:
-                log.error("player_ingest_failed", player_id=pid, error=str(e))
+                consecutive_failures += 1
+                log.error("player_ingest_failed", player_id=pid, error=str(e),
+                          consecutive_failures=consecutive_failures)
 
         log.info("yesterday_stats_done", player_rows=player_count, date=str(yesterday))
         return player_count
