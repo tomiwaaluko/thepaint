@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-04-14 (Dashboard Player Name Display Fix)
+
+### Done
+- Fixed `PlayerCard`, `PropsBoard`, and `FantasyBoard` components to display `player_name` with a `|| String(player_id)` fallback when name is missing or empty
+- Root cause: old ingest code stored `str(player_id)` as player name when no name was available; components now degrade gracefully instead of rendering blank headers
+- Changes: `dashboard/src/components/PlayerCard/PlayerCard.tsx`, `PropsBoard/PropsBoard.tsx`, `FantasyBoard/FantasyBoard.tsx`
+
+### Metrics
+- No logic or styling changes — display-only fix
+
+### Pending
+- DB backfill needed: players ingested before `nba_fetcher.py` header/proxy fix still have numeric string names in the `players` table
+
+### Next
+- Backfill `players.name` using `nba_api.stats.static.players` lookup for any rows where `name` is all digits
+
+---
+
 ## 2026-04-14 (Injury Ingest FK Crash Fix)
 
 ### Done

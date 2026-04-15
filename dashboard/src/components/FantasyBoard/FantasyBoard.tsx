@@ -63,7 +63,7 @@ export function FantasyBoard({ projections, platform }: FantasyBoardProps) {
                   className="border-b border-navy-700 hover:bg-navy-700/50"
                 >
                   <td className="py-1.5 px-2 font-medium text-neutral-200">
-                    {p.player_name}
+                    {p.player_name || String(p.player_id)}
                   </td>
                   <td className="py-1.5 px-2 text-right font-bold text-neutral-200">
                     {p.mean.toFixed(1)}
