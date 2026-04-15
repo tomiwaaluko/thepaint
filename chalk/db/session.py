@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import (
 
 from chalk.config import settings
 
-engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_size=10)
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=False,
+    pool_size=10,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
