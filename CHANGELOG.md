@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-04-14 (Vite Allowed Hosts Fix)
+
+### Done
+- Updated `dashboard/vite.config.ts` to allow Railway staging and preview hostnames in both `server.allowedHosts` and `preview.allowedHosts`
+- Added `thepaint-staging.up.railway.app` and `.up.railway.app` wildcard alongside the existing production host
+- Fixes "Blocked request. This host is not allowed." error on `thepaint-staging.up.railway.app`
+
+### Metrics
+- No functional changes — host allowlist only
+
+### Pending
+- None
+
+### Next
+- Verify staging environment loads without blocked-host errors after deploy
+
+---
+
 ## 2026-04-14 (Dashboard Player Name Display Fix)
 
 ### Done

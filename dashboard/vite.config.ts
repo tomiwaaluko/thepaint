@@ -16,9 +16,18 @@ export default defineConfig({
     },
   },
   preview: {
-    allowedHosts: ['thepaint-production.up.railway.app'],
+    allowedHosts: [
+      'thepaint-production.up.railway.app',
+      'thepaint-staging.up.railway.app',
+      '.up.railway.app',
+    ],
   },
   server: {
+    allowedHosts: [
+      'thepaint-production.up.railway.app',
+      'thepaint-staging.up.railway.app',
+      '.up.railway.app',
+    ],
     proxy: {
       '/v1': 'http://localhost:8000',
     },
