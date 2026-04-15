@@ -96,7 +96,7 @@ export function PropsBoard({ props }: PropsBoardProps) {
                     {isHighEdge && (
                       <Star size={12} className="inline mr-1 text-yellow-400 fill-yellow-400" />
                     )}
-                    {p.player_name}
+                    {p.player_name || String(p.player_id)}
                   </td>
                   <td className="py-1.5 px-1 text-neutral-400">
                     {STAT_LABELS[p.stat] ?? p.stat}

@@ -60,9 +60,11 @@ async def main_async() -> bool:
     )
 
     # 2. Ingest team + player box scores for yesterday's games
-    async def ingest_yesterday_stats(session):
-        result = await session.execute(select(Game).where(Game.date == yesterday))
-        games = result.scalars().all()
+    # Uses fresh sessions per-call to avoid stale connections during long nba_api retries
+    async def ingest_yesterday_stats(_unused_session):
+        async with async_session_factory() as session:
+            result = await session.execute(select(Game).where(Game.date == yesterday))
+            games = result.scalars().all()
 
         if not games:
             log.info("no_games_yesterday", date=str(yesterday))
@@ -74,7 +76,8 @@ async def main_async() -> bool:
             if game.season not in seen_seasons:
                 seen_seasons.add(game.season)
                 try:
-                    tc = await ingest_team_season(session, game.season)
+                    async with async_session_factory() as session:
+                        tc = await ingest_team_season(session, game.season)
                     log.info("team_season_ingested", season=game.season, rows=tc)
                 except Exception as e:
                     log.error("team_season_failed", season=game.season, error=str(e))
@@ -89,16 +92,18 @@ async def main_async() -> bool:
         # All games on the same date share a season
         season = games[0].season
 
-        p_result = await session.execute(
-            select(Player.player_id)
-            .where(Player.team_id.in_(team_ids))
-            .where(Player.is_active == True)
-        )
-        player_ids = [r[0] for r in p_result.all()]
+        async with async_session_factory() as session:
+            p_result = await session.execute(
+                select(Player.player_id)
+                .where(Player.team_id.in_(team_ids))
+                .where(Player.is_active == True)
+            )
+            player_ids = [r[0] for r in p_result.all()]
 
         for pid in player_ids:
             try:
-                pc = await ingest_player_season(session, pid, season)
+                async with async_session_factory() as session:
+                    pc = await ingest_player_season(session, pid, season)
                 player_count += pc
             except Exception as e:
                 log.error("player_ingest_failed", player_id=pid, error=str(e))

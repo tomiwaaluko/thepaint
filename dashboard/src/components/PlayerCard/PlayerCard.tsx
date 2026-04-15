@@ -17,6 +17,7 @@ const KEY_STATS = ["pts", "reb", "ast", "fg3m"];
 
 export function PlayerCard({ prediction }: PlayerCardProps) {
   const {
+    player_id,
     player_name,
     opponent_team,
     predictions,
@@ -32,7 +33,7 @@ export function PlayerCard({ prediction }: PlayerCardProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-bold text-neutral-200">{player_name}</h3>
+          <h3 className="text-sm font-bold text-neutral-200">{player_name || String(player_id)}</h3>
           <span className="text-xs text-neutral-400">vs {opponent_team}</span>
         </div>
         <div className="flex items-center gap-2">
