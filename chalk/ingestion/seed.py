@@ -102,9 +102,20 @@ async def upsert_player(session: AsyncSession, player_id: int, name: str, team_i
 
 
 async def upsert_games(session: AsyncSession, game_rows: list[dict]) -> None:
-    """Upsert game records. Each dict needs: game_id, date, season, home_team_id, away_team_id."""
+    """Upsert game records. Each dict needs: game_id, date, season, home_team_id, away_team_id.
+
+    Optional key ``is_playoffs`` (bool) will be updated on conflict so that
+    games initially seeded as regular-season can be corrected later.
+    """
     if not game_rows:
         return
     stmt = pg_insert(Game).values(game_rows)
-    stmt = stmt.on_conflict_do_nothing(index_elements=["game_id"])
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["game_id"],
+        set_={
+            "home_team_id": stmt.excluded.home_team_id,
+            "away_team_id": stmt.excluded.away_team_id,
+            "is_playoffs": stmt.excluded.is_playoffs,
+        },
+    )
     await session.execute(stmt)

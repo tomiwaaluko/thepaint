@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-04-19 (Playoff Game Ingestion Support)
+
+### Done
+- `ingest_player_season` now fetches both "Regular Season" and "Playoffs" season types — previously hardcoded to Regular Season only, which excluded all playoff game logs
+- `ingest_team_season` now fetches both season types as well
+- Added `_is_playoff_game_id()` helper — detects playoff games from game ID prefix (`004` = playoffs, `002` = regular season)
+- `ingest_today_scoreboard` now sets `is_playoffs` on game records based on game ID prefix (ScoreboardV2 and CDN fallback both return playoff games without filtering)
+- `upsert_games` changed from `on_conflict_do_nothing` to `on_conflict_do_update` so `is_playoffs` flag can be corrected on re-ingest
+- All game record creation paths (`ingest_today_scoreboard`, `ingest_player_season`, `ingest_team_season`) now include `is_playoffs` in game rows
+- Confirmed no-games paths (`no_games_yesterday`, `no_games_today`, `validate_row_counts` with 0 games) already handle irregular playoff schedules gracefully
+- Updated CLAUDE.md with playoff mode documentation
+
+### Metrics
+- No ML/prediction logic changed — ingestion-only fix
+- Playoff game logs will now appear in `player_game_logs` and `team_game_logs` tables
+
+### Pending
+- Existing games already in DB still have `is_playoffs=False` — will be corrected on next re-ingest
+- Models were trained on regular-season data only; playoff prediction accuracy may differ
+
+### Next
+- Monitor first playoff ingest run to confirm playoff game logs are captured
+- Consider whether models need playoff-specific retraining or adjustments
+
+---
+
 ## 2026-04-16 (Browser Headers + CDN Fallback)
 
 ### Done

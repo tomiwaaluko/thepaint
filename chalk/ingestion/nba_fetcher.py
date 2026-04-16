@@ -115,6 +115,15 @@ def _season_from_date(d: date) -> str:
     return f"{year}-{str(year + 1)[-2:]}"
 
 
+def _is_playoff_game_id(game_id: str) -> bool:
+    """Detect playoff game from NBA game ID prefix.
+
+    NBA game IDs: ``00 2 SSNNNN`` = regular season, ``00 4 SSNNNN`` = playoffs.
+    The third character (index 2) is the season-type digit.
+    """
+    return len(game_id) >= 3 and game_id[2] == "4"
+
+
 async def _fetch_scoreboard_cdn(game_date: date) -> list[dict]:
     """Fallback: fetch today's scoreboard from the NBA CDN (no auth/bot detection).
 
@@ -192,6 +201,7 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
             "season": season,
             "home_team_id": g["HOME_TEAM_ID"],
             "away_team_id": g["VISITOR_TEAM_ID"],
+            "is_playoffs": _is_playoff_game_id(gid),
         })
 
     if game_rows:
@@ -306,14 +316,31 @@ async def ingest_player_season(
     team_id: int = 0,
     player_name: str = "",
 ) -> int:
-    """Ingest all game logs for a player-season. Returns rows upserted."""
-    data = await _fetch_with_backoff(
+    """Ingest all game logs for a player-season. Returns rows upserted.
+
+    Fetches both Regular Season and Playoffs so that playoff game logs are
+    ingested alongside regular-season data.
+    """
+    # Fetch regular season
+    reg_data = await _fetch_with_backoff(
         playergamelog.PlayerGameLog,
         {"player_id": player_id, "season": season, "season_type_all_star": "Regular Season"},
         endpoint_name="PlayerGameLog",
     )
+    entries = list(reg_data.get("PlayerGameLog", []))
 
-    entries = data.get("PlayerGameLog", [])
+    # Fetch playoffs (may be empty during regular season — that's fine)
+    try:
+        playoff_data = await _fetch_with_backoff(
+            playergamelog.PlayerGameLog,
+            {"player_id": player_id, "season": season, "season_type_all_star": "Playoffs"},
+            endpoint_name="PlayerGameLog_Playoffs",
+        )
+        entries.extend(playoff_data.get("PlayerGameLog", []))
+    except Exception:
+        # Playoff data may not exist yet — don't fail the whole ingest
+        log.debug("playoff_gamelog_fetch_skipped", player_id=player_id, season=season)
+
     if not entries:
         return 0
 
@@ -348,6 +375,7 @@ async def ingest_player_season(
                 "season": season,
                 "home_team_id": entry_team_id if is_home else opp_team_id,
                 "away_team_id": opp_team_id if is_home else entry_team_id,
+                "is_playoffs": _is_playoff_game_id(game_id),
             })
 
         rows.append({
@@ -380,14 +408,26 @@ async def ingest_player_season(
 
 
 async def ingest_team_season(session: AsyncSession, season: str) -> int:
-    """Ingest team game logs for an entire season. Returns rows upserted."""
-    data = await _fetch_with_backoff(
+    """Ingest team game logs for an entire season (regular + playoffs). Returns rows upserted."""
+    # Fetch regular season
+    reg_data = await _fetch_with_backoff(
         leaguegamelog.LeagueGameLog,
-        {"season": season, "player_or_team_abbreviation": "T"},
+        {"season": season, "player_or_team_abbreviation": "T", "season_type_all_star": "Regular Season"},
         endpoint_name="LeagueGameLog_Teams",
     )
+    entries = list(reg_data.get("LeagueGameLog", []))
 
-    entries = data.get("LeagueGameLog", [])
+    # Fetch playoffs
+    try:
+        playoff_data = await _fetch_with_backoff(
+            leaguegamelog.LeagueGameLog,
+            {"season": season, "player_or_team_abbreviation": "T", "season_type_all_star": "Playoffs"},
+            endpoint_name="LeagueGameLog_Teams_Playoffs",
+        )
+        entries.extend(playoff_data.get("LeagueGameLog", []))
+    except Exception:
+        log.debug("playoff_team_gamelog_fetch_skipped", season=season)
+
     if not entries:
         return 0
 
@@ -445,6 +485,7 @@ async def ingest_team_season(session: AsyncSession, season: str) -> int:
             "season": season,
             "home_team_id": home,
             "away_team_id": away,
+            "is_playoffs": _is_playoff_game_id(gid),
         })
 
     # Upsert games first, then team logs
