@@ -279,7 +279,7 @@ def _build_gemini_prompt(record: dict[str, str]) -> str:
 
 async def _extract_with_gemini(client: Any, record: dict[str, str]) -> dict[str, Any] | None:
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash",
         config=types.GenerateContentConfig(
             system_instruction=GEMINI_SYSTEM_INSTRUCTION,
         ),

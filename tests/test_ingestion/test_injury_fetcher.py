@@ -122,6 +122,7 @@ class TestGeminiParsing:
 
         assert parsed["player_name"] == "LeBron James"
         assert parsed["status"] == "Out"
+        assert client.models.generate_content.call_args.kwargs["model"] == "gemini-2.0-flash"
         prompt = client.models.generate_content.call_args.kwargs["contents"]
         assert "Player: LeBron James" in prompt
         assert "Notes: Ankle" in prompt
