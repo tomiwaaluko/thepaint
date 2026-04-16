@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import random
+import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -114,15 +115,53 @@ def _season_from_date(d: date) -> str:
     return f"{year}-{str(year + 1)[-2:]}"
 
 
+def _is_playoff_game_id(game_id: str) -> bool:
+    """Detect playoff game from NBA game ID prefix.
+
+    NBA game IDs: ``00 2 SSNNNN`` = regular season, ``00 4 SSNNNN`` = playoffs.
+    The third character (index 2) is the season-type digit.
+    """
+    return len(game_id) >= 3 and game_id[2] == "4"
+
+
+async def _fetch_scoreboard_cdn(game_date: date) -> list[dict]:
+    """Fallback: fetch today's scoreboard from the NBA CDN (no auth/bot detection).
+
+    Returns a list of dicts with keys: GAME_ID, HOME_TEAM_ID, VISITOR_TEAM_ID.
+    Only works for today's games (the CDN always serves the current day's slate).
+    """
+    cdn_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+    loop = asyncio.get_event_loop()
+
+    def _do_fetch() -> list[dict]:
+        req = urllib.request.Request(cdn_url, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read().decode())
+        games_raw = payload.get("scoreboard", {}).get("games", [])
+        results: list[dict] = []
+        for g in games_raw:
+            results.append({
+                "GAME_ID": g["gameId"],
+                "HOME_TEAM_ID": g["homeTeam"]["teamId"],
+                "VISITOR_TEAM_ID": g["awayTeam"]["teamId"],
+            })
+        return results
+
+    return await loop.run_in_executor(None, _do_fetch)
+
+
 async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int:
     """Fetch games from NBA ScoreboardV2 for the given date and upsert into games table.
 
     This is used as a fallback when today's games haven't been ingested yet by the
     daily Airflow DAG. It creates game records so the dashboard can show the slate.
+    Falls back to the NBA CDN if ScoreboardV2 times out.
     """
     date_str = game_date.strftime("%m/%d/%Y")
     loop = asyncio.get_event_loop()
+    headers_list: list[dict] | None = None
 
+    # Primary path: ScoreboardV2 API
     try:
         _sb_kwargs: dict = {"headers": NBA_HEADERS, "timeout": REQUEST_TIMEOUT}
         if _NBA_PROXY:
@@ -131,18 +170,27 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
             None, lambda: scoreboardv2.ScoreboardV2(game_date=date_str, **_sb_kwargs)
         )
         data = board.get_normalized_dict()
+        headers_list = data.get("GameHeader", [])
     except Exception as e:
         log.warning("scoreboard_fetch_failed", date=date_str, error=str(e))
-        return 0
 
-    headers = data.get("GameHeader", [])
-    if not headers:
+    # CDN fallback when ScoreboardV2 fails or returns empty
+    if not headers_list:
+        try:
+            cdn_games = await _fetch_scoreboard_cdn(game_date)
+            if cdn_games:
+                headers_list = cdn_games
+                log.info("scoreboard_cdn_fallback_used", date=date_str, games=len(cdn_games))
+        except Exception as cdn_err:
+            log.warning("scoreboard_cdn_fallback_failed", date=date_str, error=str(cdn_err))
+
+    if not headers_list:
         return 0
 
     season = _season_from_date(game_date)
     game_rows: list[dict] = []
     seen: set[str] = set()
-    for g in headers:
+    for g in headers_list:
         gid = g["GAME_ID"]
         if gid in seen:
             continue
@@ -153,6 +201,7 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
             "season": season,
             "home_team_id": g["HOME_TEAM_ID"],
             "away_team_id": g["VISITOR_TEAM_ID"],
+            "is_playoffs": _is_playoff_game_id(gid),
         })
 
     if game_rows:
@@ -267,14 +316,31 @@ async def ingest_player_season(
     team_id: int = 0,
     player_name: str = "",
 ) -> int:
-    """Ingest all game logs for a player-season. Returns rows upserted."""
-    data = await _fetch_with_backoff(
+    """Ingest all game logs for a player-season. Returns rows upserted.
+
+    Fetches both Regular Season and Playoffs so that playoff game logs are
+    ingested alongside regular-season data.
+    """
+    # Fetch regular season
+    reg_data = await _fetch_with_backoff(
         playergamelog.PlayerGameLog,
         {"player_id": player_id, "season": season, "season_type_all_star": "Regular Season"},
         endpoint_name="PlayerGameLog",
     )
+    entries = list(reg_data.get("PlayerGameLog", []))
 
-    entries = data.get("PlayerGameLog", [])
+    # Fetch playoffs (may be empty during regular season — that's fine)
+    try:
+        playoff_data = await _fetch_with_backoff(
+            playergamelog.PlayerGameLog,
+            {"player_id": player_id, "season": season, "season_type_all_star": "Playoffs"},
+            endpoint_name="PlayerGameLog_Playoffs",
+        )
+        entries.extend(playoff_data.get("PlayerGameLog", []))
+    except Exception:
+        # Playoff data may not exist yet — don't fail the whole ingest
+        log.debug("playoff_gamelog_fetch_skipped", player_id=player_id, season=season)
+
     if not entries:
         return 0
 
@@ -309,6 +375,7 @@ async def ingest_player_season(
                 "season": season,
                 "home_team_id": entry_team_id if is_home else opp_team_id,
                 "away_team_id": opp_team_id if is_home else entry_team_id,
+                "is_playoffs": _is_playoff_game_id(game_id),
             })
 
         rows.append({
@@ -341,14 +408,26 @@ async def ingest_player_season(
 
 
 async def ingest_team_season(session: AsyncSession, season: str) -> int:
-    """Ingest team game logs for an entire season. Returns rows upserted."""
-    data = await _fetch_with_backoff(
+    """Ingest team game logs for an entire season (regular + playoffs). Returns rows upserted."""
+    # Fetch regular season
+    reg_data = await _fetch_with_backoff(
         leaguegamelog.LeagueGameLog,
-        {"season": season, "player_or_team_abbreviation": "T"},
+        {"season": season, "player_or_team_abbreviation": "T", "season_type_all_star": "Regular Season"},
         endpoint_name="LeagueGameLog_Teams",
     )
+    entries = list(reg_data.get("LeagueGameLog", []))
 
-    entries = data.get("LeagueGameLog", [])
+    # Fetch playoffs
+    try:
+        playoff_data = await _fetch_with_backoff(
+            leaguegamelog.LeagueGameLog,
+            {"season": season, "player_or_team_abbreviation": "T", "season_type_all_star": "Playoffs"},
+            endpoint_name="LeagueGameLog_Teams_Playoffs",
+        )
+        entries.extend(playoff_data.get("LeagueGameLog", []))
+    except Exception:
+        log.debug("playoff_team_gamelog_fetch_skipped", season=season)
+
     if not entries:
         return 0
 
@@ -406,6 +485,7 @@ async def ingest_team_season(session: AsyncSession, season: str) -> int:
             "season": season,
             "home_team_id": home,
             "away_team_id": away,
+            "is_playoffs": _is_playoff_game_id(gid),
         })
 
     # Upsert games first, then team logs

@@ -193,6 +193,15 @@ This enables independent feature sets and easier debugging per stat.
 **`validate_row_counts` — warn, don't raise:**
 When yesterday's `player_game_logs` count is zero (e.g. stats ingestion was skipped or timed out), `validate_row_counts` emits a `validation_failed_no_player_logs` warning and sets `failed = True` rather than raising a `RuntimeError`. The cron still exits with code `1` after completion.
 
+**Playoff mode (active ~April 19, 2026):**
+The system is now operating during the NBA Playoffs. Key differences from regular season:
+- Playoff game IDs use prefix `004` (regular season uses `002`). The helper `_is_playoff_game_id()` detects this from the third character of the game ID.
+- `ingest_player_season` and `ingest_team_season` fetch both "Regular Season" and "Playoffs" season types so that playoff game logs are captured.
+- `ingest_today_scoreboard` (both ScoreboardV2 and CDN fallback) returns playoff games — no season_type filter applied.
+- Playoff schedules are irregular (0 games on many days). The `no_games_yesterday` / `no_games_today` log paths handle this gracefully without errors.
+- The `is_playoffs` flag on `games` records is set automatically based on the game ID prefix.
+- `upsert_games` uses `on_conflict_do_update` so that `is_playoffs` can be corrected on re-ingest.
+
 ## Naming Conventions
 
 - Files: `snake_case.py`

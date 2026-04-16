@@ -1,5 +1,75 @@
 # Changelog
 
+## 2026-04-19 (Playoff Feature & Prediction Context)
+
+### Done
+- Added `playoff_round` feature to `chalk/features/situational.py` — derived from game ID position 5 (NBA format `004SSRGGGG` where R=round 1-4), defaults to 1 for unexpected formats, 0 for non-playoff games
+- Confirmed `is_playoffs` feature in `get_situational_features` already reads `game.is_playoffs` correctly from DB (set on ingest by previous commit)
+- Added `prediction_context` warning log in `chalk/predictions/player.py` when generating predictions for playoff games — logs `season_type=playoff`, `model_trained_on=regular_season`, `accuracy_caveat=true`
+- No model weights or training logic changed — context flagging only
+
+### Metrics
+- New feature `playoff_round` flows through pipeline automatically (dict merge in `generate_features`)
+- Unseen by existing models (will be 0.0 via `_align_features` fallback) — no impact on current predictions
+
+### Pending
+- Models have not been retrained with playoff data — playoff_round feature is available but unused by current model weights
+- Playoff prediction accuracy may differ from regular-season benchmarks
+
+### Next
+- Monitor playoff prediction logs for `prediction_context` warnings
+- Consider retraining with historical playoff data once enough 2026 playoff games are ingested
+
+---
+
+## 2026-04-19 (Playoff Game Ingestion Support)
+
+### Done
+- `ingest_player_season` now fetches both "Regular Season" and "Playoffs" season types — previously hardcoded to Regular Season only, which excluded all playoff game logs
+- `ingest_team_season` now fetches both season types as well
+- Added `_is_playoff_game_id()` helper — detects playoff games from game ID prefix (`004` = playoffs, `002` = regular season)
+- `ingest_today_scoreboard` now sets `is_playoffs` on game records based on game ID prefix (ScoreboardV2 and CDN fallback both return playoff games without filtering)
+- `upsert_games` changed from `on_conflict_do_nothing` to `on_conflict_do_update` so `is_playoffs` flag can be corrected on re-ingest
+- All game record creation paths (`ingest_today_scoreboard`, `ingest_player_season`, `ingest_team_season`) now include `is_playoffs` in game rows
+- Confirmed no-games paths (`no_games_yesterday`, `no_games_today`, `validate_row_counts` with 0 games) already handle irregular playoff schedules gracefully
+- Updated CLAUDE.md with playoff mode documentation
+
+### Metrics
+- No ML/prediction logic changed — ingestion-only fix
+- Playoff game logs will now appear in `player_game_logs` and `team_game_logs` tables
+
+### Pending
+- Existing games already in DB still have `is_playoffs=False` — will be corrected on next re-ingest
+- Models were trained on regular-season data only; playoff prediction accuracy may differ
+
+### Next
+- Monitor first playoff ingest run to confirm playoff game logs are captured
+- Consider whether models need playoff-specific retraining or adjustments
+
+---
+
+## 2026-04-16 (Browser Headers + CDN Fallback)
+
+### Done
+- Added CDN fallback for ScoreboardV2: when stats.nba.com times out, fetches from `cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json` (no auth, no bot detection)
+- Reduced default timeout from 60s to 30s (`NBA_API_TIMEOUT` setting) and retries from 5 to 3 (`NBA_API_MAX_RETRIES` setting) — configurable via env vars
+- Both settings added to `chalk/config.py` as pydantic-settings fields
+- Browser-like headers (`NBA_HEADERS`) with Sec-Fetch-* and x-nba-stats-* were already present; kept as-is
+- Pre-request jitter (0.5–1.5s) already present in `_fetch_with_backoff`; kept as-is
+
+### Metrics
+- Worst-case per-endpoint failure time: ~1.5 min (was ~5 min with 60s × 5 retries)
+- CDN fallback adds a reliable scoreboard seeding path that bypasses stats.nba.com entirely
+
+### Pending
+- Circuit breaker for player ingestion loop not yet on this branch (was in reverted commits)
+
+### Next
+- Re-apply circuit breaker pattern to `scripts/railway_ingest.py` to cap total cron runtime
+- Monitor next ingest run for CDN fallback usage via `scoreboard_cdn_fallback_used` log event
+
+---
+
 ## 2026-04-14 (Vite Allowed Hosts Fix)
 
 ### Done
