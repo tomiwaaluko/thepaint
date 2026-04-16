@@ -11,9 +11,22 @@ from chalk.api.dependencies import get_db, get_redis
 from chalk.api.schemas import PlayerPredictionResponse
 from chalk.db.models import Player, PlayerGameLog
 from chalk.exceptions import FeatureError, PredictionError
+from chalk.ingestion.injury_fetcher import get_player_status
 from chalk.predictions.player import predict_player
 
 router = APIRouter(prefix="/v1/players", tags=["players"])
+
+
+async def _with_latest_injury_status(
+    session: AsyncSession,
+    response: PlayerPredictionResponse,
+    as_of_date: date,
+) -> PlayerPredictionResponse:
+    status = await get_player_status(session, response.player_id, as_of_date)
+    injury_context = response.injury_context.model_copy(
+        update={"player_status": status}
+    )
+    return response.model_copy(update={"injury_context": injury_context})
 
 
 @router.get("/{player_id}/predict", response_model=PlayerPredictionResponse)
@@ -26,13 +39,13 @@ async def predict_player_statline(
 ) -> PlayerPredictionResponse:
     # Check cache
     cache_key = f"pred:player:{player_id}:game:{game_id}"
-    cached = await get_cached(redis, cache_key, PlayerPredictionResponse)
-    if cached:
-        return cached
-
     as_of_date = as_of.date() if as_of else date.today()
     if as_of_date > date.today():
         raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
+
+    cached = await get_cached(redis, cache_key, PlayerPredictionResponse)
+    if cached:
+        return await _with_latest_injury_status(session, cached, as_of_date)
 
     try:
         response = await predict_player(session, player_id, game_id, as_of_date)
@@ -41,6 +54,7 @@ async def predict_player_statline(
     except FeatureError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
+    response = await _with_latest_injury_status(session, response, as_of_date)
     await set_cached(redis, cache_key, response)
     return response
 

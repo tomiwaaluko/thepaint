@@ -9,9 +9,9 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ## Current Status
 
-**Active Phase:** Phase 8 — Ensemble & Tuning
-**Current Task:** Phase 8 follow-through (edge tracking dashboard, monthly retraining, final benchmark pass) + documentation polish
-**Last Updated:** Session 9
+**Active Phase:** Phase 9 - AI Injury Agent
+**Current Task:** ESPN/Gemini injury ingestion pipeline and dashboard injury status defaults
+**Last Updated:** Session 10
 
 ---
 
@@ -39,6 +39,7 @@ in TODO.md and run any relevant tests before stopping.
 | 6 | Dashboard UI | ✅ Complete | `.claude/phases/phase-6-dashboard.md` |
 | 7 | Automation & Monitoring | ✅ Complete | `.claude/phases/phase-7-automation.md` |
 | 8 | Ensemble & Tuning | ⏳ Not Started | `.claude/phases/phase-8-ensemble-tuning.md` |
+| 9 | AI Injury Agent | In Progress | `.claude/phases/phase-9-ai-injury-agent.md` |
 
 ---
 

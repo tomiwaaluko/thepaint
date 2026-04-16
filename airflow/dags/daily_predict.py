@@ -57,14 +57,13 @@ def check_todays_games(**context):
 def refresh_injuries(**context):
     """Re-pull injury updates from the last 2 hours."""
     from chalk.db.session import async_session_factory
-    from chalk.ingestion.injury_fetcher import ingest_injuries
+    from chalk.ingestion.injury_fetcher import fetch_and_store_injuries
 
     async def _run():
         async with async_session_factory() as session:
-            count = await ingest_injuries(session)
-            await session.commit()
-            print(f"Refreshed {count} injury reports")
-            return count
+            summary = await fetch_and_store_injuries(session)
+            print(f"Injury refresh summary: {summary}")
+            return summary
 
     return _run_async(_run())
 
