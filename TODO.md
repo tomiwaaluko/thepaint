@@ -255,4 +255,5 @@ Track every significant architectural decision here so future sessions don't re-
 - [x] Created comprehensive root `README.md` with project overview, architecture, local setup, run commands, test commands, API routes, guardrails, and production notes.
 - [x] Added local-only Devpost writing draft in `DEVPOST_DRAFT.md` and excluded it from git tracking via `.gitignore`.
 - [x] Added README visual section with architecture, model metrics, and API latency charts from `docs/images/`.
+- [x] Added community standards docs and templates: `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md`.
 - [ ] Continue Phase 8 remaining deliverables: edge tracking dashboard, monthly retrain script, and benchmark/CLV reporting.

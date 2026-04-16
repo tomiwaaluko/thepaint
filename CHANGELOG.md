@@ -9,6 +9,7 @@
 - Added `DEVPOST_DRAFT.md` to `.gitignore` so the draft remains local-only
 - Updated `TODO.md` session notes and current status to reflect documentation work and remaining Phase 8 tasks
 - Added a `Project Visuals` section in `README.md` with embedded architecture, model-metrics, and API-latency images plus short explanatory captions
+- Added GitHub community standards files: `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `LICENSE` (MIT), `SECURITY.md`, issue templates, and a pull request template
 
 ### Metrics
 - Documentation coverage expanded from a 1-line README to a complete onboarding and usage guide
