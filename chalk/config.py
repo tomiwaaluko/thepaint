@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # Use this when Railway datacenter IPs are blocked by stats.nba.com.
     # Format: "http://user:pass@host:port" or "http://host:port"
     NBA_PROXY_URL: str = ""
+    # nba_api request timeout in seconds (default 30).
+    NBA_API_TIMEOUT: int = 30
+    # nba_api max retry attempts before permanent failure (default 3).
+    NBA_API_MAX_RETRIES: int = 3
 
     model_config = {"env_file": ".env"}
 

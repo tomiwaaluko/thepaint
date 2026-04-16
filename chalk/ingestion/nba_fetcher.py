@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import random
+import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -24,10 +25,10 @@ _PLAYER_ID_TO_NAME: dict[int, str] = {
 log = structlog.get_logger()
 
 CACHE_DIR = Path(settings.NBA_API_CACHE_DIR)
-MAX_RETRIES = 5
+MAX_RETRIES = settings.NBA_API_MAX_RETRIES
 BASE_DELAY = 2.0
 BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
-REQUEST_TIMEOUT = 60  # seconds — stats.nba.com can be slow from cloud IPs
+REQUEST_TIMEOUT = settings.NBA_API_TIMEOUT
 
 # Browser-like headers required by stats.nba.com.
 # stats.nba.com is typically accessed via nba.com links, so Origin/Referer must
@@ -114,15 +115,44 @@ def _season_from_date(d: date) -> str:
     return f"{year}-{str(year + 1)[-2:]}"
 
 
+async def _fetch_scoreboard_cdn(game_date: date) -> list[dict]:
+    """Fallback: fetch today's scoreboard from the NBA CDN (no auth/bot detection).
+
+    Returns a list of dicts with keys: GAME_ID, HOME_TEAM_ID, VISITOR_TEAM_ID.
+    Only works for today's games (the CDN always serves the current day's slate).
+    """
+    cdn_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+    loop = asyncio.get_event_loop()
+
+    def _do_fetch() -> list[dict]:
+        req = urllib.request.Request(cdn_url, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read().decode())
+        games_raw = payload.get("scoreboard", {}).get("games", [])
+        results: list[dict] = []
+        for g in games_raw:
+            results.append({
+                "GAME_ID": g["gameId"],
+                "HOME_TEAM_ID": g["homeTeam"]["teamId"],
+                "VISITOR_TEAM_ID": g["awayTeam"]["teamId"],
+            })
+        return results
+
+    return await loop.run_in_executor(None, _do_fetch)
+
+
 async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int:
     """Fetch games from NBA ScoreboardV2 for the given date and upsert into games table.
 
     This is used as a fallback when today's games haven't been ingested yet by the
     daily Airflow DAG. It creates game records so the dashboard can show the slate.
+    Falls back to the NBA CDN if ScoreboardV2 times out.
     """
     date_str = game_date.strftime("%m/%d/%Y")
     loop = asyncio.get_event_loop()
+    headers_list: list[dict] | None = None
 
+    # Primary path: ScoreboardV2 API
     try:
         _sb_kwargs: dict = {"headers": NBA_HEADERS, "timeout": REQUEST_TIMEOUT}
         if _NBA_PROXY:
@@ -131,18 +161,27 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
             None, lambda: scoreboardv2.ScoreboardV2(game_date=date_str, **_sb_kwargs)
         )
         data = board.get_normalized_dict()
+        headers_list = data.get("GameHeader", [])
     except Exception as e:
         log.warning("scoreboard_fetch_failed", date=date_str, error=str(e))
-        return 0
 
-    headers = data.get("GameHeader", [])
-    if not headers:
+    # CDN fallback when ScoreboardV2 fails or returns empty
+    if not headers_list:
+        try:
+            cdn_games = await _fetch_scoreboard_cdn(game_date)
+            if cdn_games:
+                headers_list = cdn_games
+                log.info("scoreboard_cdn_fallback_used", date=date_str, games=len(cdn_games))
+        except Exception as cdn_err:
+            log.warning("scoreboard_cdn_fallback_failed", date=date_str, error=str(cdn_err))
+
+    if not headers_list:
         return 0
 
     season = _season_from_date(game_date)
     game_rows: list[dict] = []
     seen: set[str] = set()
-    for g in headers:
+    for g in headers_list:
         gid = g["GAME_ID"]
         if gid in seen:
             continue

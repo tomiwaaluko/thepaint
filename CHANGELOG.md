@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-04-16 (Browser Headers + CDN Fallback)
+
+### Done
+- Added CDN fallback for ScoreboardV2: when stats.nba.com times out, fetches from `cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json` (no auth, no bot detection)
+- Reduced default timeout from 60s to 30s (`NBA_API_TIMEOUT` setting) and retries from 5 to 3 (`NBA_API_MAX_RETRIES` setting) — configurable via env vars
+- Both settings added to `chalk/config.py` as pydantic-settings fields
+- Browser-like headers (`NBA_HEADERS`) with Sec-Fetch-* and x-nba-stats-* were already present; kept as-is
+- Pre-request jitter (0.5–1.5s) already present in `_fetch_with_backoff`; kept as-is
+
+### Metrics
+- Worst-case per-endpoint failure time: ~1.5 min (was ~5 min with 60s × 5 retries)
+- CDN fallback adds a reliable scoreboard seeding path that bypasses stats.nba.com entirely
+
+### Pending
+- Circuit breaker for player ingestion loop not yet on this branch (was in reverted commits)
+
+### Next
+- Re-apply circuit breaker pattern to `scripts/railway_ingest.py` to cap total cron runtime
+- Monitor next ingest run for CDN fallback usage via `scoreboard_cdn_fallback_used` log event
+
+---
+
 ## 2026-04-14 (Vite Allowed Hosts Fix)
 
 ### Done
