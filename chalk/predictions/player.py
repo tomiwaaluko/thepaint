@@ -58,6 +58,17 @@ async def predict_player(
     opp_result = await session.get(Team, opp_team_id)
     opponent_abbr = opp_result.abbreviation if opp_result else "UNK"
 
+    # Log caveat when predicting for playoff games
+    if game.is_playoffs:
+        log.warning(
+            "prediction_context",
+            season_type="playoff",
+            model_trained_on="regular_season",
+            accuracy_caveat=True,
+            player_id=player_id,
+            game_id=game_id,
+        )
+
     # Generate features
     features = await generate_features(session, player_id, game_id, as_of_date)
     feature_df = pd.DataFrame([features])

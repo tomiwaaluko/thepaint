@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-04-19 (Playoff Feature & Prediction Context)
+
+### Done
+- Added `playoff_round` feature to `chalk/features/situational.py` — derived from game ID position 5 (NBA format `004SSRGGGG` where R=round 1-4), defaults to 1 for unexpected formats, 0 for non-playoff games
+- Confirmed `is_playoffs` feature in `get_situational_features` already reads `game.is_playoffs` correctly from DB (set on ingest by previous commit)
+- Added `prediction_context` warning log in `chalk/predictions/player.py` when generating predictions for playoff games — logs `season_type=playoff`, `model_trained_on=regular_season`, `accuracy_caveat=true`
+- No model weights or training logic changed — context flagging only
+
+### Metrics
+- New feature `playoff_round` flows through pipeline automatically (dict merge in `generate_features`)
+- Unseen by existing models (will be 0.0 via `_align_features` fallback) — no impact on current predictions
+
+### Pending
+- Models have not been retrained with playoff data — playoff_round feature is available but unused by current model weights
+- Playoff prediction accuracy may differ from regular-season benchmarks
+
+### Next
+- Monitor playoff prediction logs for `prediction_context` warnings
+- Consider retraining with historical playoff data once enough 2026 playoff games are ingested
+
+---
+
 ## 2026-04-19 (Playoff Game Ingestion Support)
 
 ### Done

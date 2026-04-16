@@ -62,6 +62,14 @@ def get_situational_features(
     is_denver = (not is_home and game.home_team_id == NUGGETS_TEAM_ID) or \
                 (is_home and game.home_team_id == NUGGETS_TEAM_ID)
 
+    # Derive playoff round from game ID: position 5 encodes round (1-4)
+    # Format: 004SSRGGGG where R = round number
+    playoff_round = 0.0
+    if game.is_playoffs and len(game.game_id) >= 6 and game.game_id[5].isdigit():
+        playoff_round = float(game.game_id[5])
+    elif game.is_playoffs:
+        playoff_round = 1.0  # default if format is unexpected
+
     return {
         "days_rest": float(days_rest),
         "is_back_to_back": 1.0 if days_rest <= 1 else 0.0,
@@ -72,4 +80,5 @@ def get_situational_features(
         "game_number_in_season": float(game_number),
         "is_second_half_season": 1.0 if game_number > 41 else 0.0,
         "is_playoffs": 1.0 if game.is_playoffs else 0.0,
+        "playoff_round": playoff_round,
     }
