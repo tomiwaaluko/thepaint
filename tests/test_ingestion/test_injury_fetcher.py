@@ -105,8 +105,8 @@ class TestGeminiParsing:
 
     @pytest.mark.asyncio
     async def test_extract_with_gemini_uses_raw_record_prompt(self):
-        model = MagicMock()
-        model.generate_content.return_value = MagicMock(
+        client = MagicMock()
+        client.models.generate_content.return_value = MagicMock(
             text='{"player_name":"LeBron James","status":"Out"}'
         )
         record = {
@@ -116,11 +116,13 @@ class TestGeminiParsing:
             "raw_notes": "Ankle",
         }
 
-        parsed = await _extract_with_gemini(model, record)
+        with patch("chalk.ingestion.injury_fetcher.types") as mock_types:
+            mock_types.GenerateContentConfig.return_value = MagicMock()
+            parsed = await _extract_with_gemini(client, record)
 
         assert parsed["player_name"] == "LeBron James"
         assert parsed["status"] == "Out"
-        prompt = model.generate_content.call_args.args[0]
+        prompt = client.models.generate_content.call_args.kwargs["contents"]
         assert "Player: LeBron James" in prompt
         assert "Notes: Ankle" in prompt
 
@@ -265,14 +267,16 @@ class TestFetchAndStoreInjuries:
 
         with (
             patch("chalk.ingestion.injury_fetcher.genai") as mock_genai,
+            patch("chalk.ingestion.injury_fetcher.types") as mock_types,
             patch("chalk.ingestion.injury_fetcher._fetch_espn_injuries", new_callable=AsyncMock, return_value=SAMPLE_ESPN_RESPONSE),
             patch("chalk.ingestion.injury_fetcher._extract_with_gemini", new_callable=AsyncMock) as mock_extract,
             patch("chalk.ingestion.injury_fetcher._match_player_id_by_name", new_callable=AsyncMock, return_value=2544),
             patch("chalk.ingestion.injury_fetcher.upsert_injuries", new_callable=AsyncMock, return_value=1) as mock_upsert,
             patch("chalk.ingestion.injury_fetcher.asyncio.sleep", new_callable=AsyncMock),
         ):
-            mock_model = MagicMock()
-            mock_genai.GenerativeModel.return_value = mock_model
+            mock_client = MagicMock()
+            mock_genai.Client.return_value = mock_client
+            mock_types.GenerateContentConfig.return_value = MagicMock()
             mock_extract.return_value = {
                 "player_name": "LeBron James",
                 "status": "Questionable",
@@ -284,7 +288,7 @@ class TestFetchAndStoreInjuries:
             summary = await fetch_and_store_injuries(mock_session)
 
         assert summary == {"processed": 1, "inserted": 1, "skipped": 0, "errors": 0}
-        mock_genai.configure.assert_called_once_with(api_key="test-key")
+        mock_genai.Client.assert_called_once_with(api_key="test-key")
         row = mock_upsert.call_args.args[1][0]
         assert row["player_id"] == 2544
         assert row["status"] == "Questionable"
@@ -297,12 +301,14 @@ class TestFetchAndStoreInjuries:
 
         with (
             patch("chalk.ingestion.injury_fetcher.genai") as mock_genai,
+            patch("chalk.ingestion.injury_fetcher.types") as mock_types,
             patch("chalk.ingestion.injury_fetcher._fetch_espn_injuries", new_callable=AsyncMock, return_value=SAMPLE_ESPN_RESPONSE),
             patch("chalk.ingestion.injury_fetcher._extract_with_gemini", new_callable=AsyncMock, return_value=None),
             patch("chalk.ingestion.injury_fetcher.upsert_injuries", new_callable=AsyncMock, return_value=0),
             patch("chalk.ingestion.injury_fetcher.asyncio.sleep", new_callable=AsyncMock),
         ):
-            mock_genai.GenerativeModel.return_value = MagicMock()
+            mock_genai.Client.return_value = MagicMock()
+            mock_types.GenerateContentConfig.return_value = MagicMock()
             summary = await fetch_and_store_injuries(mock_session)
 
         assert summary == {"processed": 1, "inserted": 0, "skipped": 1, "errors": 0}

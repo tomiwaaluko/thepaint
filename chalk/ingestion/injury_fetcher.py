@@ -22,9 +22,11 @@ from chalk.db.models import Injury, Player
 from chalk.exceptions import IngestError
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
 except ImportError:  # pragma: no cover - exercised when dependency is absent locally
     genai = None
+    types = None
 
 log = structlog.get_logger()
 
@@ -275,8 +277,14 @@ def _build_gemini_prompt(record: dict[str, str]) -> str:
     )
 
 
-async def _extract_with_gemini(model: Any, record: dict[str, str]) -> dict[str, Any] | None:
-    response = model.generate_content(_build_gemini_prompt(record))
+async def _extract_with_gemini(client: Any, record: dict[str, str]) -> dict[str, Any] | None:
+    response = client.models.generate_content(
+        model="gemini-1.5-flash",
+        config=types.GenerateContentConfig(
+            system_instruction=GEMINI_SYSTEM_INSTRUCTION,
+        ),
+        contents=_build_gemini_prompt(record),
+    )
     text = getattr(response, "text", "") or ""
     extracted = _parse_gemini_json(text)
     if extracted is not None and extracted["player_name"] is None:
@@ -289,16 +297,12 @@ async def fetch_and_store_injuries(db: AsyncSession) -> dict:
     if settings.gemini_api_key is None:
         log.info(MISSING_GEMINI_KEY_MESSAGE)
         return {"processed": 0, "inserted": 0, "skipped": 0, "errors": 0}
-    if genai is None:
-        raise IngestError("google-generativeai is not installed")
+    if genai is None or types is None:
+        raise IngestError("google-genai is not installed")
 
     # TODO: Set GEMINI_API_KEY in .env (local) and Railway env vars (production)
     # Get a free key at: https://aistudio.google.com/app/apikey
-    genai.configure(api_key=settings.gemini_api_key)
-    model = genai.GenerativeModel(
-        "gemini-1.5-flash",
-        system_instruction=GEMINI_SYSTEM_INSTRUCTION,
-    )
+    client = genai.Client(api_key=settings.gemini_api_key)
 
     data = await _fetch_espn_injuries()
     records = _extract_espn_player_records(data)
@@ -308,7 +312,7 @@ async def fetch_and_store_injuries(db: AsyncSession) -> dict:
 
     for record in records:
         try:
-            extracted = await _extract_with_gemini(model, record)
+            extracted = await _extract_with_gemini(client, record)
             await asyncio.sleep(0.5)
             if extracted is None:
                 summary["skipped"] += 1
