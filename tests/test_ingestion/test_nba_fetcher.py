@@ -6,7 +6,9 @@ import pytest
 
 from chalk.exceptions import IngestError
 from chalk.ingestion.nba_fetcher import (
+    _build_rows_from_live_boxscore,
     _cache_path,
+    _parse_live_minutes,
     _parse_minutes,
     _parse_matchup,
     _fetch_with_backoff,
@@ -76,6 +78,14 @@ class TestParseMinutes:
         assert _parse_minutes(32.5) == 32.5
 
 
+class TestParseLiveMinutes:
+    def test_iso_duration(self):
+        assert _parse_live_minutes("PT32M14.00S") == pytest.approx(32.233, abs=0.01)
+
+    def test_standard_format(self):
+        assert _parse_live_minutes("12:30") == pytest.approx(12.5)
+
+
 class TestParseMatchup:
     def test_home_game(self):
         team, opp, is_home = _parse_matchup("LAL vs. GSW")
@@ -95,6 +105,72 @@ class TestCachePath:
         path = _cache_path("PlayerGameLog", {"player_id": 2544, "season": "2023-24"})
         assert path.suffix == ".json"
         assert "PlayerGameLog" in str(path)
+
+
+class TestLiveBoxscoreRows:
+    def test_builds_team_and_player_rows(self):
+        payload = {
+            "game": {
+                "gameId": "0022500001",
+                "homeTeam": {
+                    "teamId": 1610612747,
+                    "score": 110,
+                    "statistics": {
+                        "assists": 25,
+                        "turnovers": 12,
+                        "reboundsOffensive": 9,
+                        "reboundsDefensive": 31,
+                        "threePointersAttempted": 35,
+                        "fieldGoalsAttempted": 90,
+                    },
+                    "players": [
+                        {
+                            "personId": 2544,
+                            "starter": "1",
+                            "statistics": {
+                                "minutes": "PT32M14.00S",
+                                "points": 28,
+                                "reboundsTotal": 7,
+                                "assists": 8,
+                                "steals": 1,
+                                "blocks": 2,
+                                "turnovers": 3,
+                                "threePointersMade": 4,
+                                "threePointersAttempted": 8,
+                                "fieldGoalsMade": 10,
+                                "fieldGoalsAttempted": 20,
+                                "freeThrowsMade": 4,
+                                "freeThrowsAttempted": 5,
+                                "plusMinusPoints": "+12",
+                            },
+                        },
+                        {
+                            "personId": 9999,
+                            "statistics": {"minutes": "PT0M00.00S", "points": 0},
+                        },
+                    ],
+                },
+                "awayTeam": {
+                    "teamId": 1610612744,
+                    "score": 105,
+                    "statistics": {},
+                    "players": [],
+                },
+            }
+        }
+
+        team_rows, player_rows = _build_rows_from_live_boxscore(
+            payload,
+            date(2026, 4, 14),
+            "2025-26",
+        )
+
+        assert len(team_rows) == 2
+        assert team_rows[0]["fg3a_rate"] == pytest.approx(35 / 90)
+        assert len(player_rows) == 1
+        assert player_rows[0]["player_id"] == 2544
+        assert player_rows[0]["min_played"] == pytest.approx(32.233, abs=0.01)
+        assert player_rows[0]["plus_minus"] == 12
 
 
 class TestFetchWithBackoff:

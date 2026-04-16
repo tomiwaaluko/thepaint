@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import random
+import re
 import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -29,6 +30,7 @@ MAX_RETRIES = settings.NBA_API_MAX_RETRIES
 BASE_DELAY = 2.0
 BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
 REQUEST_TIMEOUT = settings.NBA_API_TIMEOUT
+CDN_REQUEST_TIMEOUT = 10
 
 # Browser-like headers required by stats.nba.com.
 # stats.nba.com is typically accessed via nba.com links, so Origin/Referer must
@@ -148,6 +150,169 @@ async def _fetch_scoreboard_cdn(game_date: date) -> list[dict]:
         return results
 
     return await loop.run_in_executor(None, _do_fetch)
+
+
+async def _fetch_boxscore_cdn(game_id: str) -> dict:
+    """Fetch one game boxscore from the NBA CDN."""
+    cdn_url = (
+        "https://cdn.nba.com/static/json/liveData/boxscore/"
+        f"boxscore_{game_id}.json"
+    )
+    loop = asyncio.get_event_loop()
+
+    def _do_fetch() -> dict:
+        req = urllib.request.Request(
+            cdn_url,
+            headers={"User-Agent": NBA_HEADERS["User-Agent"]},
+        )
+        with urllib.request.urlopen(req, timeout=CDN_REQUEST_TIMEOUT) as resp:
+            return json.loads(resp.read().decode())
+
+    return await loop.run_in_executor(None, _do_fetch)
+
+
+def _parse_live_minutes(min_val: str | int | float | None) -> float:
+    """Convert NBA liveData minutes values such as PT32M14.00S or 32:14."""
+    if min_val is None:
+        return 0.0
+    if isinstance(min_val, (int, float)):
+        return float(min_val)
+
+    min_str = str(min_val).strip()
+    if not min_str:
+        return 0.0
+
+    iso_match = re.fullmatch(r"PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?", min_str)
+    if iso_match:
+        minutes = int(iso_match.group(1) or 0)
+        seconds = float(iso_match.group(2) or 0)
+        return minutes + seconds / 60
+
+    return _parse_minutes(min_str)
+
+
+def _safe_int(value) -> int:
+    if value in (None, ""):
+        return 0
+    return int(value)
+
+
+def _safe_bool(value) -> bool:
+    return value in (True, 1, "1", "true", "True")
+
+
+def _build_rows_from_live_boxscore(
+    payload: dict,
+    game_date: date,
+    season: str,
+) -> tuple[list[dict], list[dict]]:
+    """Build TeamGameLog and PlayerGameLog rows from one NBA liveData boxscore."""
+    game = payload.get("game", {})
+    game_id = game.get("gameId")
+    if not game_id:
+        return [], []
+
+    team_rows: list[dict] = []
+    player_rows: list[dict] = []
+
+    for side in ("homeTeam", "awayTeam"):
+        team = game.get(side) or {}
+        team_id = team.get("teamId")
+        if not team_id:
+            continue
+
+        stats = team.get("statistics") or {}
+        fga = _safe_int(stats.get("fieldGoalsAttempted"))
+        fg3a = _safe_int(stats.get("threePointersAttempted"))
+
+        team_rows.append({
+            "game_id": game_id,
+            "team_id": team_id,
+            "game_date": game_date,
+            "season": season,
+            "pts": _safe_int(team.get("score") or stats.get("points")),
+            "pace": 0.0,
+            "off_rtg": 0.0,
+            "def_rtg": 0.0,
+            "ts_pct": 0.0,
+            "ast": _safe_int(stats.get("assists")),
+            "to_committed": _safe_int(stats.get("turnovers")),
+            "oreb": _safe_int(stats.get("reboundsOffensive")),
+            "dreb": _safe_int(stats.get("reboundsDefensive")),
+            "fg3a_rate": (fg3a / fga) if fga else 0.0,
+        })
+
+        for player in team.get("players") or []:
+            player_stats = player.get("statistics") or {}
+            minutes = _parse_live_minutes(player_stats.get("minutes"))
+            if minutes == 0 and _safe_int(player_stats.get("points")) == 0:
+                # Validation should reflect players who logged time, not DNPs.
+                continue
+
+            player_id = player.get("personId")
+            if not player_id:
+                continue
+
+            player_rows.append({
+                "game_id": game_id,
+                "player_id": player_id,
+                "team_id": team_id,
+                "game_date": game_date,
+                "season": season,
+                "min_played": minutes,
+                "pts": _safe_int(player_stats.get("points")),
+                "reb": _safe_int(player_stats.get("reboundsTotal")),
+                "ast": _safe_int(player_stats.get("assists")),
+                "stl": _safe_int(player_stats.get("steals")),
+                "blk": _safe_int(player_stats.get("blocks")),
+                "to_committed": _safe_int(player_stats.get("turnovers")),
+                "fg3m": _safe_int(player_stats.get("threePointersMade")),
+                "fg3a": _safe_int(player_stats.get("threePointersAttempted")),
+                "fgm": _safe_int(player_stats.get("fieldGoalsMade")),
+                "fga": _safe_int(player_stats.get("fieldGoalsAttempted")),
+                "ftm": _safe_int(player_stats.get("freeThrowsMade")),
+                "fta": _safe_int(player_stats.get("freeThrowsAttempted")),
+                "plus_minus": _safe_int(player_stats.get("plusMinusPoints")),
+                "starter": _safe_bool(player.get("starter")),
+            })
+
+    return team_rows, player_rows
+
+
+async def ingest_game_boxscores_cdn(session: AsyncSession, games) -> tuple[int, int]:
+    """Ingest team and player rows for specific games via NBA CDN boxscores."""
+    team_rows: list[dict] = []
+    player_rows: list[dict] = []
+
+    for game in games:
+        try:
+            payload = await _fetch_boxscore_cdn(game.game_id)
+            game_team_rows, game_player_rows = _build_rows_from_live_boxscore(
+                payload,
+                game.date,
+                game.season,
+            )
+            team_rows.extend(game_team_rows)
+            player_rows.extend(game_player_rows)
+        except Exception as exc:
+            log.warning("boxscore_cdn_fetch_failed", game_id=game.game_id, error=str(exc))
+
+    for row in player_rows:
+        name = _PLAYER_ID_TO_NAME.get(row["player_id"], str(row["player_id"]))
+        await upsert_player(session, row["player_id"], name, row["team_id"])
+
+    team_count = await upsert_team_game_logs(session, team_rows)
+    player_count = await upsert_player_game_logs(session, player_rows)
+
+    if team_count or player_count:
+        log.info(
+            "boxscore_cdn_ingested",
+            games=len(games),
+            team_rows=team_count,
+            player_rows=player_count,
+        )
+
+    return team_count, player_count
 
 
 async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int:

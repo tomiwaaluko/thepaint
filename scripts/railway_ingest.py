@@ -27,6 +27,7 @@ async def main_async() -> bool:
     from chalk.db.session import async_session_factory
     from chalk.ingestion.injury_fetcher import ingest_injuries
     from chalk.ingestion.nba_fetcher import (
+        ingest_game_boxscores_cdn,
         ingest_player_season,
         ingest_team_season,
         ingest_today_scoreboard,
@@ -72,6 +73,7 @@ async def main_async() -> bool:
 
         # Ingest full team season logs (one call per season covers all teams)
         seen_seasons: set[str] = set()
+        team_stats_failed = False
         for game in games:
             if game.season not in seen_seasons:
                 seen_seasons.add(game.season)
@@ -81,8 +83,24 @@ async def main_async() -> bool:
                     log.info("team_season_ingested", season=game.season, rows=tc)
                 except Exception as e:
                     log.error("team_season_failed", season=game.season, error=str(e))
+                    team_stats_failed = True
 
         # Ingest player game logs — use active roster for each team playing yesterday
+        if team_stats_failed:
+            async with async_session_factory() as session:
+                team_rows, player_rows = await ingest_game_boxscores_cdn(session, games)
+            if player_rows:
+                log.info(
+                    "yesterday_stats_done",
+                    player_rows=player_rows,
+                    team_rows=team_rows,
+                    date=str(yesterday),
+                    source="nba_cdn_boxscore",
+                )
+                return player_rows
+            log.warning("boxscore_cdn_no_rows", date=str(yesterday), games=len(games))
+            return 0
+
         player_count = 0
         team_ids: set[int] = set()
         for game in games:
@@ -101,21 +119,11 @@ async def main_async() -> bool:
             player_ids = [r[0] for r in p_result.all()]
 
         # Circuit breaker: if N consecutive players fail, nba_api is likely
-        # unreachable from this IP — skip remaining to avoid burning hours.
+        # unreachable from this IP. Fall back instead of burning hours.
         CIRCUIT_BREAKER_THRESHOLD = 3
         consecutive_failures = 0
 
-        for pid in player_ids:
-            if consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD:
-                skipped = len(player_ids) - player_ids.index(pid)
-                log.error(
-                    "circuit_breaker_tripped",
-                    consecutive_failures=consecutive_failures,
-                    skipped_players=skipped,
-                    msg="nba_api appears unreachable — skipping remaining players",
-                )
-                break
-
+        for index, pid in enumerate(player_ids):
             try:
                 async with async_session_factory() as session:
                     pc = await ingest_player_season(session, pid, season)
@@ -123,8 +131,37 @@ async def main_async() -> bool:
                 consecutive_failures = 0  # reset on success
             except Exception as e:
                 consecutive_failures += 1
-                log.error("player_ingest_failed", player_id=pid, error=str(e),
-                          consecutive_failures=consecutive_failures)
+                log.error(
+                    "player_ingest_failed",
+                    player_id=pid,
+                    error=str(e),
+                    consecutive_failures=consecutive_failures,
+                )
+                if consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD:
+                    skipped = len(player_ids) - index - 1
+                    log.warning(
+                        "circuit_breaker_fallback",
+                        consecutive_failures=consecutive_failures,
+                        fallback="nba_cdn_boxscore",
+                        skipped_players=skipped,
+                    )
+                    async with async_session_factory() as session:
+                        team_rows, fallback_player_rows = await ingest_game_boxscores_cdn(
+                            session,
+                            games,
+                        )
+                    if fallback_player_rows:
+                        player_count += fallback_player_rows
+                        log.info(
+                            "yesterday_stats_done",
+                            player_rows=player_count,
+                            team_rows=team_rows,
+                            date=str(yesterday),
+                            source="nba_cdn_boxscore",
+                        )
+                        return player_count
+                    log.warning("boxscore_cdn_no_rows", date=str(yesterday), games=len(games))
+                    break
 
         log.info("yesterday_stats_done", player_rows=player_count, date=str(yesterday))
         return player_count
