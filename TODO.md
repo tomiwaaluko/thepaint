@@ -10,8 +10,8 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 ## Current Status
 
 **Active Phase:** Phase 8 — Ensemble & Tuning
-**Current Task:** Optuna + LightGBM + Stacking implemented — needs training run on real data
-**Last Updated:** Session 8
+**Current Task:** Phase 8 follow-through (edge tracking dashboard, monthly retraining, final benchmark pass) + documentation polish
+**Last Updated:** Session 9
 
 ---
 
@@ -247,3 +247,13 @@ Track every significant architectural decision here so future sessions don't re-
 - **Stale dashboard data** — DB has no games after 2026-03-08. Cron jobs will fill forward from today but 3/9–3/15 gap needs a one-time backfill script run against production Supabase.
 - **Odds fetcher stubbed** — `fetch_odds_lines()` in `railway_ingest.py` logs game count but does not fetch real odds. Props Board shows no real Vegas lines.
 - **Cron crash verification** — Ingest and prediction cron services were crashing due to Railpack builder (fixed to Dockerfile). Next scheduled run will confirm fix.
+
+---
+
+## Session 9 Notes
+
+- [x] Created comprehensive root `README.md` with project overview, architecture, local setup, run commands, test commands, API routes, guardrails, and production notes.
+- [x] Added local-only Devpost writing draft in `DEVPOST_DRAFT.md` and excluded it from git tracking via `.gitignore`.
+- [x] Added README visual section with architecture, model metrics, and API latency charts from `docs/images/`.
+- [x] Added community standards docs and templates: `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md`.
+- [ ] Continue Phase 8 remaining deliverables: edge tracking dashboard, monthly retrain script, and benchmark/CLV reporting.

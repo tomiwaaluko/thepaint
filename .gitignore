@@ -14,3 +14,6 @@ venv/
 .mypy_cache/
 .ruff_cache/
 mlruns/
+DEVPOST_DRAFT.md
+.codex-tmp/
+.tmp/
