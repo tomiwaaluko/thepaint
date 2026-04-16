@@ -1,4 +1,4 @@
-# Chalk
+# Chalk 🏀📈📊
 
 Machine learning-powered NBA statline predictions for players and teams.
 
