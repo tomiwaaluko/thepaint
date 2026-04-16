@@ -15,5 +15,7 @@ venv/
 .ruff_cache/
 mlruns/
 DEVPOST_DRAFT.md
+DEMO_SCRIPT.md
+DEMO_SCRIPT_ELEVENLABS.md
 .codex-tmp/
 .tmp/
