@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-04-16 (README + Devpost Draft)
+
+### Done
+- Replaced placeholder root `README.md` with a full project README covering overview, features, stack, repo layout, setup, run/test commands, key API routes, guardrails, and production notes
+- Added `DEVPOST_DRAFT.md` with a complete submission draft (project story, built-with stack, links, and media checklist)
+- Updated Devpost draft wording to first-person solo-project voice and simplified challenge explanations for non-technical readers
+- Added `DEVPOST_DRAFT.md` to `.gitignore` so the draft remains local-only
+- Updated `TODO.md` session notes and current status to reflect documentation work and remaining Phase 8 tasks
+- Added a `Project Visuals` section in `README.md` with embedded architecture, model-metrics, and API-latency images plus short explanatory captions
+
+### Metrics
+- Documentation coverage expanded from a 1-line README to a complete onboarding and usage guide
+- No runtime code changes; API/model/ingestion behavior remains unchanged
+
+### Pending
+- Finish Phase 8 items: edge tracking dashboard, monthly retraining automation, and final benchmark/CLV report
+- Validate latest Railway cron runs and resolve remaining data freshness/odds ingestion blockers
+
+### Next
+- Implement real odds ingestion in production cron flow
+- Build edge tracking visualization/reporting and wire monthly retrain execution
+- Add quickstart screenshots/GIF to README for easier first-time onboarding
+
+---
+
 ## 2026-04-19 (Playoff Feature & Prediction Context)
 
 ### Done
