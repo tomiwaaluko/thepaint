@@ -236,6 +236,8 @@ class TestIngestGameBoxscoresEspn:
         mock_player_result.all.return_value = []
         mock_session.execute = AsyncMock(return_value=mock_player_result)
 
+        mock_fetch_boxscore = AsyncMock(return_value=espn_boxscore)
+
         with (
             patch(
                 "chalk.ingestion.nba_fetcher._fetch_scoreboard_espn",
@@ -243,7 +245,7 @@ class TestIngestGameBoxscoresEspn:
             ),
             patch(
                 "chalk.ingestion.nba_fetcher._fetch_boxscore_espn",
-                AsyncMock(return_value=espn_boxscore),
+                mock_fetch_boxscore,
             ),
             patch(
                 "chalk.ingestion.nba_fetcher.upsert_team_game_logs",
@@ -259,6 +261,8 @@ class TestIngestGameBoxscoresEspn:
             )
         assert team_count == 0
         assert player_count == 0
+        # Verify that the ESPN event ID (not the NBA ID) was used for the boxscore fetch
+        mock_fetch_boxscore.assert_awaited_once_with("401585601")
 
     @pytest.mark.asyncio
     async def test_skips_nba_game_with_no_espn_event_mapping(self):

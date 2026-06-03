@@ -507,16 +507,16 @@ def _build_rows_from_espn_boxscore(
     for team in boxscore.get("teams", []):
         abbr = team.get("team", {}).get("abbreviation", "")
         stats = {s.get("name"): s.get("displayValue") for s in team.get("statistics", [])}
-        fgm = _safe_int(stats.get("fieldGoalsMade"))
         fga = _safe_int(stats.get("fieldGoalsAttempted"))
         fg3a = _safe_int(stats.get("threePointFieldGoalsAttempted"))
+        # ESPN summary does not expose rebound splits or true-shooting percentage.
+        # Use 0.0 for those columns rather than mislabeling total_reb as dreb or FG% as ts_pct.
         team_totals_by_abbr[abbr] = {
             "pts": _safe_int(stats.get("points")),
             "ast": _safe_int(stats.get("assists")),
-            "reb": _safe_int(stats.get("rebounds")),
             "to_committed": _safe_int(stats.get("turnovers")),
             "fg3a_rate": (fg3a / fga) if fga else 0.0,
-            "ts_pct": (fgm / fga) if fga else 0.0,
+            "ts_pct": 0.0,  # ESPN doesn't provide TS% — leave unset
         }
 
     for team_box in boxscore.get("players", []):
@@ -539,8 +539,9 @@ def _build_rows_from_espn_boxscore(
             "ts_pct": float(totals.get("ts_pct") or 0.0),
             "ast": _safe_int(totals.get("ast")),
             "to_committed": _safe_int(totals.get("to_committed")),
+            # ESPN summary does not split offensive/defensive rebounds — leave both zero.
             "oreb": 0,
-            "dreb": _safe_int(totals.get("reb")),
+            "dreb": 0,
             "fg3a_rate": float(totals.get("fg3a_rate") or 0.0),
         })
 
@@ -685,6 +686,11 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
             log.warning("scoreboard_cdn_fallback_failed", date=date_str, error=str(cdn_err))
 
     # ESPN fallback when NBA endpoints are unavailable from the runtime IP.
+    # NOTE: If this ESPN path runs *before* a ScoreboardV2/CDN run for the same date,
+    # the ESPN 9-digit event IDs are stored in the games table. A later ScoreboardV2
+    # run will insert new rows with canonical 10-digit NBA IDs for the same matchups,
+    # creating duplicate game records. The permanent fix is a unique constraint on
+    # (date, home_team_id, away_team_id) — see docs/ACCURACY_PLAN.md §5 (uq_game_matchup).
     if not headers_list:
         try:
             espn_games = await _fetch_scoreboard_espn(game_date)
