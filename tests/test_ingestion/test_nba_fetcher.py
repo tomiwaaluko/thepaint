@@ -300,6 +300,64 @@ class TestIngestGameBoxscoresEspn:
         assert team_count == 0
         assert player_count == 0
 
+    @pytest.mark.asyncio
+    async def test_uses_espn_event_id_directly_for_espn_format_game(self):
+        """When game_id is already an ESPN event ID, use it directly for the fetch."""
+        mock_game = MagicMock()
+        mock_game.game_id = "401585601"  # ESPN event ID — not a canonical NBA ID
+        mock_game.date = date(2026, 4, 14)
+        mock_game.season = "2025-26"
+        mock_game.home_team_id = 1610612747
+        mock_game.away_team_id = 1610612744
+
+        espn_boxscore = {"boxscore": {"teams": [], "players": []}}
+
+        mock_session = AsyncMock()
+        mock_player_result = MagicMock()
+        mock_player_result.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_player_result)
+
+        mock_fetch_boxscore = AsyncMock(return_value=espn_boxscore)
+
+        with (
+            patch("chalk.ingestion.nba_fetcher._fetch_boxscore_espn", mock_fetch_boxscore),
+            patch("chalk.ingestion.nba_fetcher.upsert_team_game_logs", AsyncMock(return_value=0)),
+            patch("chalk.ingestion.nba_fetcher.upsert_player_game_logs", AsyncMock(return_value=0)),
+        ):
+            await ingest_game_boxscores_espn(mock_session, [mock_game])
+
+        # ESPN event ID used directly — no reconciliation step needed
+        mock_fetch_boxscore.assert_awaited_once_with("401585601")
+
+    @pytest.mark.asyncio
+    async def test_continues_on_boxscore_fetch_error(self):
+        """Logs warning and returns zero counts when boxscore fetch raises."""
+        mock_game = MagicMock()
+        mock_game.game_id = "401585601"
+        mock_game.date = date(2026, 4, 14)
+        mock_game.season = "2025-26"
+        mock_game.home_team_id = 1610612747
+        mock_game.away_team_id = 1610612744
+
+        mock_session = AsyncMock()
+        mock_player_result = MagicMock()
+        mock_player_result.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_player_result)
+
+        with (
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_boxscore_espn",
+                AsyncMock(side_effect=ConnectionError("API timeout")),
+            ),
+            patch("chalk.ingestion.nba_fetcher.upsert_team_game_logs", AsyncMock(return_value=0)),
+            patch("chalk.ingestion.nba_fetcher.upsert_player_game_logs", AsyncMock(return_value=0)),
+        ):
+            team_count, player_count = await ingest_game_boxscores_espn(mock_session, [mock_game])
+
+        # Exception is caught and logged — function should not propagate it
+        assert team_count == 0
+        assert player_count == 0
+
 
 class TestParseMinutes:
     def test_standard_format(self):
