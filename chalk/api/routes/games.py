@@ -36,7 +36,11 @@ async def get_today_games(
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> TodayGamesResponse:
-    """Return today's games (or tomorrow's if none today or after 11 PM ET)."""
+    """Return today's or tomorrow's games.
+
+    Falls back to tomorrow's slate after 11 PM ET. Returns today's date with an
+    empty ``games`` list when no current slate is available.
+    """
     now_et = datetime.now(ET_TZ)
     today = now_et.date()
     tomorrow = today + timedelta(days=1)
@@ -95,7 +99,9 @@ async def get_today_games(
         )
 
     response = TodayGamesResponse(date=target_date, games=summaries)
-    await set_cached(redis, cache_key, response, ttl=300)
+    # Don't cache empty slates — games may be ingested moments later.
+    if summaries:
+        await set_cached(redis, cache_key, response, ttl=300)
     return response
 
 

@@ -17,6 +17,7 @@ from chalk.ingestion.nba_fetcher import (
     _parse_matchup,
     _fetch_with_backoff,
     _reconcile_espn_scoreboard_games,
+    ingest_game_boxscores_espn,
     ingest_player_season,
     ingest_team_season,
 )
@@ -197,6 +198,103 @@ class TestEspnBoxscoreRows:
         assert player_rows[0]["game_id"] == "0022500916"
         assert player_rows[0]["player_id"] == 2544
         assert player_rows[0]["pts"] == 28
+
+
+class TestIngestGameBoxscoresEspn:
+    """Tests for the public ingest_game_boxscores_espn entrypoint."""
+
+    @pytest.mark.asyncio
+    async def test_ingests_rows_for_reconciled_nba_game(self):
+        """ESPN boxscore is fetched and rows are upserted for an NBA-format game ID."""
+        mock_game = MagicMock()
+        mock_game.game_id = "0022500916"
+        mock_game.date = date(2026, 4, 14)
+        mock_game.season = "2025-26"
+        mock_game.home_team_id = 1610612747
+        mock_game.away_team_id = 1610612744
+
+        espn_scoreboard = [
+            {
+                "ESPN_EVENT_ID": "401585601",
+                "GAME_ID": "401585601",
+                "HOME_TEAM_ID": 1610612747,
+                "VISITOR_TEAM_ID": 1610612744,
+                "IS_PLAYOFFS": False,
+                "STATUS": "Final",
+            }
+        ]
+        espn_boxscore = {
+            "boxscore": {
+                "teams": [],
+                "players": [],
+            }
+        }
+
+        mock_session = AsyncMock()
+        # _player_lookup_by_name query
+        mock_player_result = MagicMock()
+        mock_player_result.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_player_result)
+
+        with (
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_scoreboard_espn",
+                AsyncMock(return_value=espn_scoreboard),
+            ),
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_boxscore_espn",
+                AsyncMock(return_value=espn_boxscore),
+            ),
+            patch(
+                "chalk.ingestion.nba_fetcher.upsert_team_game_logs",
+                AsyncMock(return_value=0),
+            ),
+            patch(
+                "chalk.ingestion.nba_fetcher.upsert_player_game_logs",
+                AsyncMock(return_value=0),
+            ),
+        ):
+            team_count, player_count = await ingest_game_boxscores_espn(
+                mock_session, [mock_game]
+            )
+        assert team_count == 0
+        assert player_count == 0
+
+    @pytest.mark.asyncio
+    async def test_skips_nba_game_with_no_espn_event_mapping(self):
+        """Logs warning and skips game when ESPN event map has no match."""
+        mock_game = MagicMock()
+        mock_game.game_id = "0022500916"
+        mock_game.date = date(2026, 4, 14)
+        mock_game.season = "2025-26"
+        mock_game.home_team_id = 1610612747
+        mock_game.away_team_id = 1610612744
+
+        mock_session = AsyncMock()
+        mock_player_result = MagicMock()
+        mock_player_result.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_player_result)
+
+        upsert_team = AsyncMock(return_value=0)
+        upsert_player_logs = AsyncMock(return_value=0)
+
+        with (
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_scoreboard_espn",
+                AsyncMock(return_value=[]),  # empty → event_map is empty
+            ),
+            patch("chalk.ingestion.nba_fetcher.upsert_team_game_logs", upsert_team),
+            patch("chalk.ingestion.nba_fetcher.upsert_player_game_logs", upsert_player_logs),
+        ):
+            team_count, player_count = await ingest_game_boxscores_espn(
+                mock_session, [mock_game]
+            )
+
+        # Nothing to upsert — the game was skipped
+        upsert_team.assert_called_once_with(mock_session, [])
+        upsert_player_logs.assert_called_once_with(mock_session, [])
+        assert team_count == 0
+        assert player_count == 0
 
 
 class TestParseMinutes:

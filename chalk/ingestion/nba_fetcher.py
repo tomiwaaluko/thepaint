@@ -259,18 +259,31 @@ async def _player_lookup_by_name(session: AsyncSession) -> dict[tuple[int, str],
     }
 
 
+async def _fetch_espn_url(url: str) -> dict:
+    """Fetch an ESPN JSON URL with exponential-backoff retry (max MAX_RETRIES attempts)."""
+    loop = asyncio.get_event_loop()
+    for attempt in range(MAX_RETRIES):
+        await asyncio.sleep(random.uniform(0.2, 0.8))
+        try:
+            def _do_fetch(u: str = url) -> dict:
+                req = urllib.request.Request(u, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
+                with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+                    return json.loads(resp.read().decode())
+            return await loop.run_in_executor(None, _do_fetch)
+        except Exception as exc:
+            delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
+            log.warning("espn_fetch_retry", url=url, attempt=attempt, error=str(exc), delay=delay)
+            if attempt == MAX_RETRIES - 1:
+                raise IngestError(f"ESPN fetch failed after {MAX_RETRIES} attempts: {url}") from exc
+            await asyncio.sleep(delay)
+    raise IngestError("Unreachable")  # pragma: no cover
+
+
 async def _fetch_scoreboard_espn(game_date: date) -> list[dict]:
     """Fetch a date's NBA slate from ESPN as a fallback source."""
     url = f"{ESPN_SCOREBOARD_URL}?dates={game_date:%Y%m%d}&limit=100"
-    loop = asyncio.get_event_loop()
-
-    def _do_fetch() -> list[dict]:
-        req = urllib.request.Request(url, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-            payload = json.loads(resp.read().decode())
-        return _parse_espn_scoreboard_events(payload)
-
-    return await loop.run_in_executor(None, _do_fetch)
+    payload = await _fetch_espn_url(url)
+    return _parse_espn_scoreboard_events(payload)
 
 
 async def _fetch_scoreboard_cdn(game_date: date) -> list[dict]:
@@ -471,14 +484,7 @@ async def ingest_game_boxscores_cdn(session: AsyncSession, games) -> tuple[int, 
 
 async def _fetch_boxscore_espn(event_id: str) -> dict:
     url = f"{ESPN_SUMMARY_URL}?event={event_id}"
-    loop = asyncio.get_event_loop()
-
-    def _do_fetch() -> dict:
-        req = urllib.request.Request(url, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-            return json.loads(resp.read().decode())
-
-    return await loop.run_in_executor(None, _do_fetch)
+    return await _fetch_espn_url(url)
 
 
 def _espn_stats_map(entry: dict, keys: list[str]) -> dict[str, str]:

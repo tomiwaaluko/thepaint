@@ -28,4 +28,12 @@ $process = New-Object System.Diagnostics.Process
 $process.StartInfo = $psi
 [void]$process.Start()
 
-Write-Host "Started handoff watcher process $($process.Id)."
+# Drain stdout/stderr asynchronously to the log files so the buffers don't block.
+$null = $process.StandardOutput.ReadToEndAsync().ContinueWith({
+    param($t) [System.IO.File]::WriteAllText($outPath, $t.Result)
+})
+$null = $process.StandardError.ReadToEndAsync().ContinueWith({
+    param($t) [System.IO.File]::WriteAllText($errPath, $t.Result)
+})
+
+Write-Host "Started handoff watcher process $($process.Id). Logs: $outPath"

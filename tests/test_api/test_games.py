@@ -140,8 +140,8 @@ async def test_today_games_response_schema(mock_ingest):
 
 @pytest.mark.asyncio
 @patch(INGEST_PATCH, new_callable=AsyncMock, return_value=0)
-async def test_today_games_fallback_to_latest(mock_ingest):
-    """When no current slate exists, do not present stale games as today."""
+async def test_today_games_no_stale_fallback(mock_ingest):
+    """When no current slate exists, return empty list rather than stale games."""
 
     empty = _make_empty_result()
 
