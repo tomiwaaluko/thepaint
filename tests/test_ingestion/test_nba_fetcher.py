@@ -1,17 +1,22 @@
 """Tests for NBAFetcher ingestion functions."""
 from datetime import date
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from chalk.exceptions import IngestError
 from chalk.ingestion.nba_fetcher import (
+    _build_rows_from_espn_boxscore,
     _build_rows_from_live_boxscore,
     _cache_path,
+    _espn_event_is_playoffs,
+    _is_nba_game_id,
+    _parse_espn_scoreboard_events,
     _parse_live_minutes,
     _parse_minutes,
     _parse_matchup,
     _fetch_with_backoff,
+    _reconcile_espn_scoreboard_games,
     ingest_player_season,
     ingest_team_season,
 )
@@ -56,6 +61,142 @@ SAMPLE_TEAM_LOG = {
         }
     ]
 }
+
+
+class TestNbaGameId:
+    def test_nba_game_id(self):
+        assert _is_nba_game_id("0022500916") is True
+        assert _is_nba_game_id("0042300401") is True
+
+    def test_espn_event_id(self):
+        assert _is_nba_game_id("401585601") is False
+
+
+class TestEspnPlayoffsDetection:
+    def test_regular_season(self):
+        event = {"season": {"type": 2}, "competitions": [{"season": {"type": 2}}]}
+        assert _espn_event_is_playoffs(event) is False
+
+    def test_postseason_type(self):
+        event = {"season": {"type": 3}, "competitions": [{}]}
+        assert _espn_event_is_playoffs(event) is True
+
+    def test_postseason_slug(self):
+        event = {"season": {"slug": "post-season"}, "competitions": [{}]}
+        assert _espn_event_is_playoffs(event) is True
+
+
+class TestEspnScoreboardParse:
+    def test_parse_events(self):
+        payload = {
+            "events": [
+                {
+                    "id": "401585601",
+                    "season": {"type": 2},
+                    "competitions": [
+                        {
+                            "competitors": [
+                                {
+                                    "homeAway": "home",
+                                    "team": {"abbreviation": "LAL"},
+                                },
+                                {
+                                    "homeAway": "away",
+                                    "team": {"abbreviation": "GS"},
+                                },
+                            ],
+                            "status": {"type": {"description": "Final"}},
+                        }
+                    ],
+                }
+            ]
+        }
+        games = _parse_espn_scoreboard_events(payload)
+        assert len(games) == 1
+        assert games[0]["ESPN_EVENT_ID"] == "401585601"
+        assert games[0]["IS_PLAYOFFS"] is False
+        assert games[0]["HOME_TEAM_ID"] == 1610612747
+        assert games[0]["VISITOR_TEAM_ID"] == 1610612744
+
+
+class TestReconcileEspnGameIds:
+    @pytest.mark.asyncio
+    async def test_prefers_existing_nba_game_id(self):
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.all.return_value = [("0022500916",)]
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        espn_games = [
+            {
+                "ESPN_EVENT_ID": "401585601",
+                "GAME_ID": "401585601",
+                "HOME_TEAM_ID": 1610612747,
+                "VISITOR_TEAM_ID": 1610612744,
+                "IS_PLAYOFFS": False,
+                "STATUS": "Final",
+            }
+        ]
+        reconciled = await _reconcile_espn_scoreboard_games(
+            mock_session,
+            date(2026, 4, 14),
+            espn_games,
+        )
+        assert reconciled[0]["GAME_ID"] == "0022500916"
+
+
+class TestEspnBoxscoreRows:
+    def test_builds_player_row(self):
+        lookup = {(1610612747, "lebronjames"): 2544}
+        payload = {
+            "boxscore": {
+                "teams": [
+                    {
+                        "team": {"abbreviation": "LAL"},
+                        "statistics": [
+                            {"name": "points", "displayValue": "110"},
+                            {"name": "assists", "displayValue": "25"},
+                            {"name": "rebounds", "displayValue": "40"},
+                            {"name": "turnovers", "displayValue": "10"},
+                            {"name": "fieldGoalsMade", "displayValue": "40"},
+                            {"name": "fieldGoalsAttempted", "displayValue": "85"},
+                            {"name": "threePointFieldGoalsAttempted", "displayValue": "30"},
+                        ],
+                    }
+                ],
+                "players": [
+                    {
+                        "team": {"abbreviation": "LAL"},
+                        "statistics": [
+                            {
+                                "keys": ["minutes", "points", "rebounds", "assists", "steals", "blocks", "turnovers",
+                                         "fieldGoalsMade-fieldGoalsAttempted",
+                                         "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+                                         "freeThrowsMade-freeThrowsAttempted", "plusMinus"],
+                                "athletes": [
+                                    {
+                                        "athlete": {"displayName": "LeBron James"},
+                                        "stats": ["32:14", "28", "7", "8", "1", "2", "3", "10-20", "4-8", "4-5", "+12"],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        }
+        team_rows, player_rows = _build_rows_from_espn_boxscore(
+            payload,
+            "0022500916",
+            date(2026, 4, 14),
+            "2025-26",
+            lookup,
+        )
+        assert len(team_rows) == 1
+        assert len(player_rows) == 1
+        assert player_rows[0]["game_id"] == "0022500916"
+        assert player_rows[0]["player_id"] == 2544
+        assert player_rows[0]["pts"] == 28
 
 
 class TestParseMinutes:

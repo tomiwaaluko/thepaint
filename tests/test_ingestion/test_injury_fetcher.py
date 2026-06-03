@@ -166,6 +166,17 @@ class TestGetPlayerStatus:
         status = await get_player_status(mock_session, player_id=2544, game_date=date(2024, 1, 15))
         assert status == "Out"
 
+    @pytest.mark.asyncio
+    async def test_returns_active_when_injury_outside_seven_day_window(self):
+        """No row within the 7-day window → treat as Active (stale Out ignored)."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        status = await get_player_status(mock_session, player_id=2544, game_date=date(2024, 1, 15))
+        assert status == "Active"
+
 
 class TestResolvePlayerId:
     @pytest.mark.asyncio

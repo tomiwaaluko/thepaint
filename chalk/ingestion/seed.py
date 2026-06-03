@@ -113,9 +113,12 @@ async def upsert_games(session: AsyncSession, game_rows: list[dict]) -> None:
     stmt = stmt.on_conflict_do_update(
         index_elements=["game_id"],
         set_={
+            "date": stmt.excluded.date,
+            "season": stmt.excluded.season,
             "home_team_id": stmt.excluded.home_team_id,
             "away_team_id": stmt.excluded.away_team_id,
             "is_playoffs": stmt.excluded.is_playoffs,
+            "status": stmt.excluded.status,
         },
     )
     await session.execute(stmt)

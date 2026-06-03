@@ -6,7 +6,7 @@ import inspect
 import json
 import re
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -354,10 +354,11 @@ async def ingest_injuries(session: AsyncSession) -> int:
 
 
 async def get_player_status(session: AsyncSession, player_id: int, game_date: date) -> str:
-    """Return most recent injury status for a player on or before game_date."""
+    """Return most recent injury status for a player on or before game_date (7-day window)."""
     result = await session.execute(
         select(Injury.status)
         .where(Injury.player_id == player_id, Injury.report_date <= game_date)
+        .where(Injury.report_date >= game_date - timedelta(days=7))
         .order_by(Injury.report_date.desc())
         .limit(1)
     )

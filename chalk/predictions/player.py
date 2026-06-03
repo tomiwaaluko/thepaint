@@ -1,5 +1,5 @@
 """Player prediction engine — generates full statline predictions."""
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -183,11 +183,14 @@ async def _get_injury_context(
     as_of_date: date,
 ) -> InjuryContext:
     """Build injury context for a player prediction."""
+    recent_cutoff = as_of_date - timedelta(days=7)
+
     # Check player's own status
     result = await session.execute(
         select(Injury)
         .where(Injury.player_id == player_id)
         .where(Injury.report_date <= as_of_date)
+        .where(Injury.report_date >= recent_cutoff)
         .order_by(Injury.report_date.desc())
         .limit(1)
     )
@@ -205,7 +208,8 @@ async def _get_injury_context(
         .where(Player.team_id == team_id)
         .where(Injury.player_id != player_id)
         .where(Injury.report_date <= as_of_date)
-        .where(Injury.status.in_(["Out", "out"]))
+        .where(Injury.report_date >= recent_cutoff)
+        .order_by(Injury.player_id, Injury.report_date.desc())
     )
     absent_rows = result.all()
     # Deduplicate by player — keep most recent report
@@ -214,7 +218,8 @@ async def _get_injury_context(
     for injury, player in absent_rows:
         if player.player_id not in seen:
             seen.add(player.player_id)
-            absent_names.append(player.name)
+            if injury.status in ("Out", "out"):
+                absent_names.append(player.name)
 
     # Simple opportunity adjustment: +5% per absent teammate (capped at +25%)
     adj = min(1.25, 1.0 + 0.05 * len(absent_names))

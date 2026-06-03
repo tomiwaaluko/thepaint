@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.api.cache import get_cached, set_cached
 from chalk.api.dependencies import get_db, get_redis
-from chalk.api.schemas import OverUnderResponse
+from chalk.api.schemas import GAME_ID_PATTERN, OverUnderResponse
 from chalk.betting.over_under import (
     american_to_implied_probability,
     calculate_edge,
@@ -32,7 +32,7 @@ ALLOWED_STATS = frozenset({"pts", "reb", "ast", "fg3m", "stl", "blk", "to_commit
 @router.get("/{player_id}/props", response_model=list[OverUnderResponse])
 async def player_props(
     player_id: int = Path(..., gt=0, description="Player ID"),
-    game_id: str = Query(..., description="NBA game ID", pattern=r"^[0-9]{10}$"),
+    game_id: str = Query(..., description="NBA or ESPN game ID", pattern=GAME_ID_PATTERN),
     stats: list[str] = Query(default=DEFAULT_STATS),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),

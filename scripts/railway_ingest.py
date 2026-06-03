@@ -28,6 +28,7 @@ async def main_async() -> bool:
     from chalk.ingestion.injury_fetcher import ingest_injuries
     from chalk.ingestion.nba_fetcher import (
         ingest_game_boxscores_cdn,
+        ingest_game_boxscores_espn,
         ingest_player_season,
         ingest_team_season,
         ingest_today_scoreboard,
@@ -89,16 +90,19 @@ async def main_async() -> bool:
         if team_stats_failed:
             async with async_session_factory() as session:
                 team_rows, player_rows = await ingest_game_boxscores_cdn(session, games)
+            if not player_rows:
+                async with async_session_factory() as session:
+                    team_rows, player_rows = await ingest_game_boxscores_espn(session, games)
             if player_rows:
                 log.info(
                     "yesterday_stats_done",
                     player_rows=player_rows,
                     team_rows=team_rows,
                     date=str(yesterday),
-                    source="nba_cdn_boxscore",
+                    source="fallback_boxscore",
                 )
                 return player_rows
-            log.warning("boxscore_cdn_no_rows", date=str(yesterday), games=len(games))
+            log.warning("boxscore_fallback_no_rows", date=str(yesterday), games=len(games))
             return 0
 
         player_count = 0
@@ -150,6 +154,12 @@ async def main_async() -> bool:
                             session,
                             games,
                         )
+                    if not fallback_player_rows:
+                        async with async_session_factory() as session:
+                            team_rows, fallback_player_rows = await ingest_game_boxscores_espn(
+                                session,
+                                games,
+                            )
                     if fallback_player_rows:
                         player_count += fallback_player_rows
                         log.info(
@@ -157,10 +167,10 @@ async def main_async() -> bool:
                             player_rows=player_count,
                             team_rows=team_rows,
                             date=str(yesterday),
-                            source="nba_cdn_boxscore",
+                            source="fallback_boxscore",
                         )
                         return player_count
-                    log.warning("boxscore_cdn_no_rows", date=str(yesterday), games=len(games))
+                    log.warning("boxscore_fallback_no_rows", date=str(yesterday), games=len(games))
                     break
 
         log.info("yesterday_stats_done", player_rows=player_count, date=str(yesterday))
