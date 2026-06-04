@@ -20,9 +20,15 @@ import structlog
 log = structlog.get_logger()
 
 
+def _missing_player_logs_should_fail(strict_validation: bool) -> bool:
+    """Return whether validation should make the cron exit non-zero."""
+    return strict_validation
+
+
 async def main_async() -> bool:
     from sqlalchemy import func, select
 
+    from chalk.config import settings
     from chalk.db.models import Game, Player, PlayerGameLog
     from chalk.db.session import async_session_factory
     from chalk.ingestion.injury_fetcher import ingest_injuries
@@ -37,6 +43,7 @@ async def main_async() -> bool:
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     today = datetime.now(timezone.utc).date()
     failed = False
+    strict_validation = settings.INGEST_STRICT_VALIDATION
 
     async def run_step(name, coro):
         nonlocal failed
@@ -229,8 +236,10 @@ async def main_async() -> bool:
                 "validation_failed_no_player_logs",
                 games=game_count,
                 date=str(yesterday),
+                strict_validation=strict_validation,
             )
-            failed = True
+            if _missing_player_logs_should_fail(strict_validation):
+                failed = True
             return
 
         log.info("validation_passed", player_logs=log_count, games=game_count, date=str(yesterday))
