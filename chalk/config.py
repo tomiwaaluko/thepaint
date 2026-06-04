@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     NBA_API_TIMEOUT: int = 30
     # nba_api max retry attempts before permanent failure (default 3).
     NBA_API_MAX_RETRIES: int = 3
+    # When true, missing player logs for a day with games make the ingest cron exit non-zero.
+    INGEST_STRICT_VALIDATION: bool = False
 
     model_config = {"env_file": ".env"}
 
