@@ -11,7 +11,7 @@ from functools import lru_cache
 from typing import Any
 
 import httpx
-import structlogh
+import structlog
 from nba_api.stats.static import players as nba_static_players
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
