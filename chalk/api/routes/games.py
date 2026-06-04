@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chalk.api.cache import get_cached, set_cached
 from chalk.api.dependencies import get_db, get_redis
 from chalk.api.schemas import (
+    GAME_ID_PATTERN,
     GamePredictionResponse,
     GameSummary,
     PlayerPredictionResponse,
@@ -35,7 +36,11 @@ async def get_today_games(
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> TodayGamesResponse:
-    """Return today's games (or tomorrow's if none today or after 11 PM ET)."""
+    """Return today's or tomorrow's games.
+
+    Falls back to tomorrow's slate after 11 PM ET. Returns today's date with an
+    empty ``games`` list when no current slate is available.
+    """
     now_et = datetime.now(ET_TZ)
     today = now_et.date()
     tomorrow = today + timedelta(days=1)
@@ -74,19 +79,8 @@ async def get_today_games(
     elif today_games:
         games, target_date = today_games, today
     else:
-        # Fallback: show the most recent date that has games in the DB
-        latest_date_result = await session.execute(
-            select(func.max(Game.date))
-        )
-        latest_date = latest_date_result.scalar()
-        if latest_date:
-            result = await session.execute(
-                select(Game).where(Game.date == latest_date).order_by(Game.game_id)
-            )
-            games = result.scalars().all()
-            target_date = latest_date
-        else:
-            games, target_date = [], today
+        log.warning("today_games_unavailable", date=str(today))
+        games, target_date = [], today
 
     summaries: list[GameSummary] = []
     for g in games:
@@ -105,7 +99,9 @@ async def get_today_games(
         )
 
     response = TodayGamesResponse(date=target_date, games=summaries)
-    await set_cached(redis, cache_key, response, ttl=300)
+    # Don't cache empty slates — games may be ingested moments later.
+    if summaries:
+        await set_cached(redis, cache_key, response, ttl=300)
     return response
 
 
@@ -125,7 +121,7 @@ async def clear_game_cache(
 
 @router.get("/{game_id}/predict", response_model=GamePredictionResponse)
 async def predict_game(
-    game_id: str = Path(..., pattern=r"^[0-9]{10}$", description="NBA game ID"),
+    game_id: str = Path(..., pattern=GAME_ID_PATTERN, description="NBA or ESPN game ID"),
     as_of: datetime | None = Query(None, description="Prediction as-of datetime"),
     nocache: bool = Query(False, description="Skip cache lookup"),
     session: AsyncSession = Depends(get_db),

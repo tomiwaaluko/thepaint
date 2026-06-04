@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-04-16 (Phase 9 AI Injury Agent)
+
+### Done
+- Added Gemini-backed NBA injury ingestion from ESPN's public injury endpoint with structured JSON extraction, DB player matching, and upsert summaries.
+- Wired Airflow injury refresh tasks to `fetch_and_store_injuries()` and kept compatibility wrappers for existing cron scripts.
+- Added `GEMINI_API_KEY` configuration and documentation, plus a standalone manual injury-agent runner.
+- Updated player prediction responses and the dashboard `InjuryBadge` to default missing statuses to `Active`.
+- Expanded injury fetcher tests for ESPN parsing, Gemini JSON handling, player matching, missing API key behavior, and skip/error paths.
+
+### Pending
+- Run the manual script against real ESPN/Gemini credentials after `GEMINI_API_KEY` is configured locally or in Railway.
+
+---
+
 ## 2026-04-16 (README + Devpost Draft)
 
 ### Done

@@ -36,7 +36,7 @@ This Code of Conduct applies within all project spaces, and also applies when an
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project maintainer at `goku@example.com`.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project maintainer at `tomiwaaluko02@gmail.com`.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

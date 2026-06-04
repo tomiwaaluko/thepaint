@@ -317,3 +317,16 @@ Each entry should summarize:
 - Key metrics or results (MAE scores, test counts, latency numbers)
 - What's pending or broken
 - Next recommended action
+
+## PR Review Flow (CodeRabbit MCP)
+
+After every pull request is created, Claude Code must:
+
+1. **Wait ~60 seconds** for CodeRabbit to complete its automated review
+2. **Fetch the review** via `mcp__coderabbitai__get_coderabbit_reviews` using the repo owner, repo name, and PR number
+3. **Triage comments** — fix all actionable issues (bugs, security, correctness). Skip nitpicks unless they're fast wins
+4. **Commit and push fixes** so the PR diff updates on GitHub
+5. **Re-fetch the review** to confirm addressed comments are resolved
+6. **Hand off to user** with a summary of what was fixed and what (if anything) was intentionally skipped
+
+This flow is mandatory for every PR, not optional.

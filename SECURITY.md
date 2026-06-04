@@ -10,7 +10,8 @@ Please do not open a public GitHub issue for security vulnerabilities.
 
 Instead, report vulnerabilities privately by contacting the maintainer at:
 
-- Email: `goku@example.com`
+- Discord: `triumphyou`
+- Email: `tomiwaaluko02@gmail.com`
 
 Include:
 

@@ -140,34 +140,13 @@ async def test_today_games_response_schema(mock_ingest):
 
 @pytest.mark.asyncio
 @patch(INGEST_PATCH, new_callable=AsyncMock, return_value=0)
-async def test_today_games_fallback_to_latest(mock_ingest):
-    """When no games today/tomorrow, falls back to latest date in DB."""
-    latest = date(2026, 3, 7)
-
-    mock_game = MagicMock()
-    mock_game.game_id = "0022500916"
-    mock_game.date = latest
-    mock_game.home_team_id = 10
-    mock_game.away_team_id = 20
-    mock_game.status = "Final"
-
-    mock_home = MagicMock()
-    mock_home.abbreviation = "MIA"
-    mock_away = MagicMock()
-    mock_away.abbreviation = "NYK"
+async def test_today_games_no_stale_fallback(mock_ingest):
+    """When no current slate exists, return empty list rather than stale games."""
 
     empty = _make_empty_result()
-    max_date_result = MagicMock()
-    max_date_result.scalars.return_value.all.return_value = []
-    max_date_result.scalar.return_value = latest
-    fallback_result = _make_games_result([mock_game])
 
     db = AsyncMock()
-    # Calls: 1=today, 2=tomorrow, 3=max(date), 4=games for latest date
-    db.execute = AsyncMock(side_effect=[empty, empty, max_date_result, fallback_result])
-    db.get = AsyncMock(
-        side_effect=lambda model, tid: mock_home if tid == 10 else mock_away
-    )
+    db.execute = AsyncMock(side_effect=[empty, empty])
 
     redis = _make_redis()
 
@@ -185,10 +164,8 @@ async def test_today_games_fallback_to_latest(mock_ingest):
             resp = await client.get("/v1/games/today")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["date"] == "2026-03-07"
-        assert len(data["games"]) == 1
-        assert data["games"][0]["game_id"] == "0022500916"
-        assert data["games"][0]["home_team"] == "MIA"
+        assert data["date"] == str(date.today())
+        assert data["games"] == []
     finally:
         app.dependency_overrides.clear()
 

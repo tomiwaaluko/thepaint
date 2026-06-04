@@ -108,7 +108,7 @@ async def test_predict_player_returns_correct_schema(mock_predict, override_deps
     assert data["player_name"] == "LeBron James"
     assert len(data["predictions"]) == 7
     assert data["fantasy_scores"]["draftkings"] == 45.5
-    assert data["injury_context"]["player_status"] == "active"
+    assert data["injury_context"]["player_status"] == "Active"
 
 
 @pytest.mark.asyncio

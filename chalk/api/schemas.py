@@ -3,6 +3,9 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# NBA game IDs are 10 digits (002…); ESPN event IDs are typically 9 digits.
+GAME_ID_PATTERN = r"^[0-9]{9,10}$"
+
 
 class StatPrediction(BaseModel):
     model_config = ConfigDict(populate_by_name=True)

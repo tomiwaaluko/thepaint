@@ -97,14 +97,13 @@ def ingest_yesterday_games(**context):
 def ingest_injuries(**context):
     """Pull latest injury reports."""
     from chalk.db.session import async_session_factory
-    from chalk.ingestion.injury_fetcher import ingest_injuries as _ingest
+    from chalk.ingestion.injury_fetcher import fetch_and_store_injuries
 
     async def _run():
         async with async_session_factory() as session:
-            count = await _ingest(session)
-            await session.commit()
-            print(f"Ingested {count} injury reports")
-            return count
+            summary = await fetch_and_store_injuries(session)
+            print(f"Injury ingestion summary: {summary}")
+            return summary
 
     return _run_async(_run())
 
@@ -185,6 +184,7 @@ t_ingest_injuries = PythonOperator(
     python_callable=ingest_injuries,
     dag=dag,
 )
+t_fetch_injuries = t_ingest_injuries
 
 t_fetch_odds = PythonOperator(
     task_id="fetch_odds_lines",

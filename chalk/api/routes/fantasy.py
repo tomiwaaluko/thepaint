@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.api.cache import get_cached, set_cached
 from chalk.api.dependencies import get_db, get_redis
-from chalk.api.schemas import FantasyScores
+from chalk.api.schemas import GAME_ID_PATTERN, FantasyScores
 from chalk.api.schemas_betting import FantasyProjectionResponse, SlateFantasyResponse
 from chalk.db.models import Game, PlayerGameLog, Team
 from chalk.exceptions import PredictionError
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/v1", tags=["fantasy"])
 @router.get("/players/{player_id}/fantasy", response_model=FantasyProjectionResponse)
 async def player_fantasy(
     player_id: int = Path(..., gt=0, description="Player ID"),
-    game_id: str = Query(..., description="NBA game ID", pattern=r"^[0-9]{10}$"),
+    game_id: str = Query(..., description="NBA or ESPN game ID", pattern=GAME_ID_PATTERN),
     platform: Literal["draftkings", "fanduel", "yahoo"] = Query("draftkings", description="Fantasy platform"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
@@ -69,7 +69,7 @@ async def player_fantasy(
 
 @router.get("/games/{game_id}/fantasy", response_model=SlateFantasyResponse)
 async def game_fantasy(
-    game_id: str = Path(..., pattern=r"^[0-9]{10}$", description="NBA game ID"),
+    game_id: str = Path(..., pattern=GAME_ID_PATTERN, description="NBA or ESPN game ID"),
     platform: Literal["draftkings", "fanduel", "yahoo"] = Query("draftkings", description="Fantasy platform"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
