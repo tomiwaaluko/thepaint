@@ -57,6 +57,10 @@ Current scope:
   - `reb`: MAE 2.129, RMSE 2.711, bias -0.208.
   - `ast`: MAE 1.395, RMSE 2.033, bias 0.118.
   - `fg3m`: MAE 1.080, RMSE 1.558, bias -0.112.
+- CodeRabbit cleanup focused tests: `pytest tests/test_ingestion/test_odds_fetcher.py tests/test_features/test_vegas.py tests/test_scaffold.py::TestORMModels::test_game_matchup_unique_constraint -v`: 12 passed.
+- CodeRabbit cleanup full suite: `pytest tests/ -v`: 252 passed, 4 warnings.
+- Baseline evaluator smoke after cleanup: `python scripts/evaluate_baseline.py --season 2024-25 --stats pts --max-rows 5 --output .cache/baseline_smoke_review_fix.json`.
+  - `pts`: MAE 8.147, RMSE 8.625, bias -1.381.
 
 ## Production Audit
 

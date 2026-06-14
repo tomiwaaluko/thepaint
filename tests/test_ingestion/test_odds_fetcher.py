@@ -263,3 +263,43 @@ class TestFetchGameTotals:
         assert rows[0]["sportsbook"] == "fanduel"
         assert rows[0]["market"] == "game_total"
         assert rows[0]["line"] == 229.5
+
+    @pytest.mark.asyncio
+    async def test_fetch_game_totals_skips_incomplete_total(self, odds_db):
+        odds = [
+            {
+                "id": "odds-event-1",
+                "commence_time": "2024-01-16T01:00:00Z",
+                "home_team": "Los Angeles Lakers",
+                "away_team": "Golden State Warriors",
+                "bookmakers": [
+                    {
+                        "key": "fanduel",
+                        "markets": [
+                            {
+                                "key": "totals",
+                                "outcomes": [
+                                    {"name": "Over", "price": -105, "point": 229.5},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        with (
+            patch(
+                "chalk.ingestion.odds_fetcher._fetch_odds",
+                new_callable=AsyncMock,
+                return_value=odds,
+            ),
+            patch(
+                "chalk.ingestion.odds_fetcher.upsert_betting_lines",
+                new_callable=AsyncMock,
+                return_value=0,
+            ) as mock_upsert,
+        ):
+            assert await fetch_game_totals(odds_db, date(2024, 1, 15)) == 0
+
+        assert mock_upsert.call_args.args[1] == []

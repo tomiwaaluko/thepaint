@@ -33,8 +33,10 @@ async def backfill_game(game_id: str) -> tuple[int, int]:
         team_rows, player_rows = await ingest_game_boxscores_cdn(session, [game])
         source = "cdn"
         if not player_rows:
-            team_rows, player_rows = await ingest_game_boxscores_espn(session, [game])
-            source = "espn"
+            espn_team_rows, espn_player_rows = await ingest_game_boxscores_espn(session, [game])
+            team_rows += espn_team_rows
+            player_rows += espn_player_rows
+            source = "cdn+espn" if team_rows != espn_team_rows else "espn"
         await session.commit()
         log.info(
             "game_boxscore_backfilled",

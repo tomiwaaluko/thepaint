@@ -79,7 +79,7 @@ Do not retrain models until these checks and any required migration/data repair 
 `ingest_today_scoreboard` can create NBA API format IDs (`004...`) while ESPN fallback paths can create ESPN-style IDs (`401...`) for the same physical game. Both IDs can persist in the `games` table. A 2026-06-14 audit showed this is not limited to empty `004...` shells; several duplicate pairs have player logs on both IDs, and at least one reported missing-log ESPN row has logs on its duplicate NBA-format row.
 
 **Evidence from production:**
-```
+```text
 game_id=401873203  date=2026-05-30  status=final  player_logs=19   <- has stats
 game_id=0042500317 date=2026-05-30  status=scheduled  player_logs=0  <- empty shell
 game_id=401873342  date=2026-05-21  status=final  player_logs=0

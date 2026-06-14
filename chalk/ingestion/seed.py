@@ -113,7 +113,19 @@ async def upsert_games(session: AsyncSession, game_rows: list[dict]) -> None:
     if not game_rows:
         return
     filtered_rows = []
+    seen_matchups: set[tuple] = set()
     for row in game_rows:
+        matchup_key = (row["date"], row["home_team_id"], row["away_team_id"])
+        if matchup_key in seen_matchups:
+            log.info(
+                "game_matchup_batch_duplicate_skipped",
+                incoming_game_id=row["game_id"],
+                date=str(row["date"]),
+                home_team_id=row["home_team_id"],
+                away_team_id=row["away_team_id"],
+            )
+            continue
+
         existing_result = await session.execute(
             select(Game.game_id)
             .where(Game.date == row["date"])
@@ -132,6 +144,7 @@ async def upsert_games(session: AsyncSession, game_rows: list[dict]) -> None:
                 away_team_id=row["away_team_id"],
             )
             continue
+        seen_matchups.add(matchup_key)
         filtered_rows.append(row)
 
     if not filtered_rows:

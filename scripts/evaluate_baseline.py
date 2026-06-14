@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from chalk.db.models import PlayerGameLog
 from chalk.db.session import async_session_factory
+from chalk.exceptions import ModelNotFoundError
 from chalk.features.pipeline import generate_features
 from chalk.models.registry import load_lgbm_model, load_model
 
@@ -33,7 +34,7 @@ def _load_best_available_model(stat: str):
     if stat in LGBM_STATS:
         try:
             return load_lgbm_model(stat)
-        except Exception:
+        except (FileNotFoundError, ModelNotFoundError, OSError, ImportError):
             return load_model(stat)
     return load_model(stat)
 
@@ -60,7 +61,7 @@ async def _qualified_logs(session, season: str, min_games: int, max_rows: int | 
         .where(PlayerGameLog.player_id.in_(select(qualified_subq.c.player_id)))
         .order_by(PlayerGameLog.game_date.asc(), PlayerGameLog.player_id.asc())
     )
-    if max_rows:
+    if max_rows is not None:
         stmt = stmt.limit(max_rows)
     result = await session.execute(stmt)
     return result.scalars().all()
@@ -101,6 +102,11 @@ async def evaluate_baseline(
             target_rows.append(game_log)
             if index % 250 == 0:
                 log.info("baseline_progress", processed=index, total=len(logs))
+
+        if not feature_rows:
+            raise SystemExit(
+                f"No features generated for season={season}; check feature errors above"
+            )
 
         results = []
         for stat in stats:

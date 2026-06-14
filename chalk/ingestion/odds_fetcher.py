@@ -276,14 +276,27 @@ async def fetch_game_totals(session: AsyncSession, game_date: date) -> int:
             for market in bookmaker.get("markets", []):
                 over_odds = None
                 under_odds = None
-                line = 0.0
+                line = None
                 for outcome in market.get("outcomes", []):
-                    if outcome.get("name") == "Over":
-                        over_odds = outcome.get("price")
-                        line = outcome.get("point", 0.0)
-                    elif outcome.get("name") == "Under":
-                        under_odds = outcome.get("price")
+                    outcome_name = (outcome.get("name") or "").strip().lower()
+                    price = outcome.get("price")
+                    point = outcome.get("point")
+                    if outcome_name == "over":
+                        over_odds = int(price) if price is not None else None
+                        line = float(point) if point is not None else None
+                    elif outcome_name == "under":
+                        under_odds = int(price) if price is not None else None
 
+                if line is None or over_odds is None or under_odds is None:
+                    log.warning(
+                        "odds_total_incomplete",
+                        game_id=game_id,
+                        sportsbook=sportsbook,
+                        line=line,
+                        over_odds=over_odds,
+                        under_odds=under_odds,
+                    )
+                    continue
                 rows.append({
                     "game_id": game_id,
                     "player_id": None,

@@ -18,6 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         """
+        CREATE TEMP TABLE duplicate_game_map ON COMMIT DROP AS
         WITH game_counts AS (
             SELECT
                 g.game_id,
@@ -44,14 +45,20 @@ def upgrade() -> None:
                 ) AS matchup_count
             FROM game_counts
         ),
-        duplicate_map AS (
+        duplicate_games AS (
             SELECT game_id AS duplicate_game_id, canonical_game_id
             FROM ranked
             WHERE matchup_count > 1
               AND game_id <> canonical_game_id
         )
+        SELECT duplicate_game_id, canonical_game_id
+        FROM duplicate_games
+        """
+    )
+    op.execute(
+        """
         DELETE FROM player_game_logs pgl
-        USING duplicate_map dm
+        USING duplicate_game_map dm
         WHERE pgl.game_id = dm.duplicate_game_id
           AND EXISTS (
               SELECT 1
@@ -63,58 +70,34 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        ),
-        duplicate_map AS (
-            SELECT game_id AS duplicate_game_id, canonical_game_id
-            FROM ranked
-            WHERE matchup_count > 1
-              AND game_id <> canonical_game_id
+        WITH ranked AS (
+            SELECT
+                pgl.log_id,
+                row_number() OVER (
+                    PARTITION BY dm.canonical_game_id, pgl.player_id
+                    ORDER BY pgl.game_date DESC, pgl.log_id DESC
+                ) AS row_num
+            FROM player_game_logs pgl
+            JOIN duplicate_game_map dm ON dm.duplicate_game_id = pgl.game_id
         )
+        DELETE FROM player_game_logs pgl
+        USING ranked r
+        WHERE pgl.log_id = r.log_id
+          AND r.row_num > 1
+        """
+    )
+    op.execute(
+        """
         UPDATE player_game_logs pgl
         SET game_id = dm.canonical_game_id
-        FROM duplicate_map dm
+        FROM duplicate_game_map dm
         WHERE pgl.game_id = dm.duplicate_game_id
         """
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        ),
-        duplicate_map AS (
-            SELECT game_id AS duplicate_game_id, canonical_game_id
-            FROM ranked
-            WHERE matchup_count > 1
-              AND game_id <> canonical_game_id
-        )
         DELETE FROM team_game_logs tgl
-        USING duplicate_map dm
+        USING duplicate_game_map dm
         WHERE tgl.game_id = dm.duplicate_game_id
           AND EXISTS (
               SELECT 1
@@ -126,116 +109,50 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        ),
-        duplicate_map AS (
-            SELECT game_id AS duplicate_game_id, canonical_game_id
-            FROM ranked
-            WHERE matchup_count > 1
-              AND game_id <> canonical_game_id
+        WITH ranked AS (
+            SELECT
+                tgl.log_id,
+                row_number() OVER (
+                    PARTITION BY dm.canonical_game_id, tgl.team_id
+                    ORDER BY tgl.game_date DESC, tgl.log_id DESC
+                ) AS row_num
+            FROM team_game_logs tgl
+            JOIN duplicate_game_map dm ON dm.duplicate_game_id = tgl.game_id
         )
+        DELETE FROM team_game_logs tgl
+        USING ranked r
+        WHERE tgl.log_id = r.log_id
+          AND r.row_num > 1
+        """
+    )
+    op.execute(
+        """
         UPDATE team_game_logs tgl
         SET game_id = dm.canonical_game_id
-        FROM duplicate_map dm
+        FROM duplicate_game_map dm
         WHERE tgl.game_id = dm.duplicate_game_id
         """
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        ),
-        duplicate_map AS (
-            SELECT game_id AS duplicate_game_id, canonical_game_id
-            FROM ranked
-            WHERE matchup_count > 1
-              AND game_id <> canonical_game_id
-        )
         UPDATE predictions p
         SET game_id = dm.canonical_game_id
-        FROM duplicate_map dm
+        FROM duplicate_game_map dm
         WHERE p.game_id = dm.duplicate_game_id
         """
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        ),
-        duplicate_map AS (
-            SELECT game_id AS duplicate_game_id, canonical_game_id
-            FROM ranked
-            WHERE matchup_count > 1
-              AND game_id <> canonical_game_id
-        )
         UPDATE injuries i
         SET game_id = dm.canonical_game_id
-        FROM duplicate_map dm
+        FROM duplicate_game_map dm
         WHERE i.game_id = dm.duplicate_game_id
         """
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        ),
-        duplicate_map AS (
-            SELECT game_id AS duplicate_game_id, canonical_game_id
-            FROM ranked
-            WHERE matchup_count > 1
-              AND game_id <> canonical_game_id
-        )
         DELETE FROM betting_lines bl
-        USING duplicate_map dm
+        USING duplicate_game_map dm
         WHERE bl.game_id = dm.duplicate_game_id
           AND EXISTS (
               SELECT 1
@@ -249,55 +166,39 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        ),
-        duplicate_map AS (
-            SELECT game_id AS duplicate_game_id, canonical_game_id
-            FROM ranked
-            WHERE matchup_count > 1
-              AND game_id <> canonical_game_id
+        WITH ranked AS (
+            SELECT
+                bl.line_id,
+                row_number() OVER (
+                    PARTITION BY
+                        dm.canonical_game_id,
+                        bl.player_id,
+                        bl.market,
+                        bl.sportsbook
+                    ORDER BY bl.timestamp DESC, bl.line_id DESC
+                ) AS row_num
+            FROM betting_lines bl
+            JOIN duplicate_game_map dm ON dm.duplicate_game_id = bl.game_id
         )
+        DELETE FROM betting_lines bl
+        USING ranked r
+        WHERE bl.line_id = r.line_id
+          AND r.row_num > 1
+        """
+    )
+    op.execute(
+        """
         UPDATE betting_lines bl
         SET game_id = dm.canonical_game_id
-        FROM duplicate_map dm
+        FROM duplicate_game_map dm
         WHERE bl.game_id = dm.duplicate_game_id
         """
     )
     op.execute(
         """
-        WITH game_counts AS (
-            SELECT g.game_id, g.date, g.home_team_id, g.away_team_id, count(pgl.log_id) AS player_log_count
-            FROM games g
-            LEFT JOIN player_game_logs pgl ON pgl.game_id = g.game_id
-            GROUP BY g.game_id
-        ),
-        ranked AS (
-            SELECT *,
-                first_value(game_id) OVER (
-                    PARTITION BY date, home_team_id, away_team_id
-                    ORDER BY player_log_count DESC, CASE WHEN game_id LIKE '00%' THEN 0 ELSE 1 END, game_id ASC
-                ) AS canonical_game_id,
-                count(*) OVER (PARTITION BY date, home_team_id, away_team_id) AS matchup_count
-            FROM game_counts
-        )
         DELETE FROM games g
-        USING ranked r
-        WHERE g.game_id = r.game_id
-          AND r.matchup_count > 1
-          AND r.game_id <> r.canonical_game_id
+        USING duplicate_game_map dm
+        WHERE g.game_id = dm.duplicate_game_id
         """
     )
     op.create_unique_constraint(
