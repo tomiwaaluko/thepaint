@@ -151,7 +151,16 @@ class Injury(Base):
 
 class BettingLine(Base):
     __tablename__ = "betting_lines"
-    __table_args__ = (UniqueConstraint("game_id", "market", "sportsbook", name="uq_betting_game_market_book"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "game_id",
+            "player_id",
+            "market",
+            "sportsbook",
+            name="uq_betting_game_player_market_book",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     line_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     game_id: Mapped[str] = mapped_column(String(100), nullable=False)

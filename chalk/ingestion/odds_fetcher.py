@@ -12,6 +12,7 @@ from chalk.exceptions import IngestError
 log = structlog.get_logger()
 
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
+BETTING_LINE_CONFLICT_COLUMNS = ["game_id", "player_id", "market", "sportsbook"]
 
 
 async def _fetch_odds(endpoint: str, params: dict) -> dict:
@@ -36,7 +37,7 @@ async def upsert_betting_lines(session: AsyncSession, rows: list[dict]) -> int:
 
     stmt = pg_insert(BettingLine).values(rows)
     stmt = stmt.on_conflict_do_update(
-        index_elements=["game_id", "market", "sportsbook"],
+        index_elements=BETTING_LINE_CONFLICT_COLUMNS,
         set_={
             "line": stmt.excluded.line,
             "over_odds": stmt.excluded.over_odds,

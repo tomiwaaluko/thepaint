@@ -1,7 +1,7 @@
 # Accuracy Improvement Plan
 
-**Last updated:** 2026-06-03
-**Status:** Awaiting execution approval per wave
+**Last updated:** 2026-06-14
+**Status:** Pre-flight implementation in progress before Wave 1
 
 ---
 
@@ -15,6 +15,45 @@ Production state at time of writing:
 - 0 betting lines (Odds API wired in code but stubbed in cron)
 - Duplicate game records: ESPN-style `401...` IDs (have stats) coexist with NBA API `004...` IDs (empty shells) for the same games
 - Models trained on 2015-2024 regular season; currently predicting 2025-26 playoffs with no playoff-specific adjustment
+
+---
+
+## Pre-flight Fixes Before Wave 1
+
+**Goal:** Fix confirmed correctness bugs and verify production-state claims before activating new data sources or retraining models.
+
+### Task 0.1 - Fix roster injury feature lookup
+
+`chalk/features/roster.py::get_absent_players()` must not require `Injury.report_date == game_date`. Injury reports can be published 1-7 days before tipoff, so roster features should use reports where `report_date <= as_of_date` and `report_date >= as_of_date - 7 days`.
+
+The feature query must deduplicate by player and use only the latest report in the window. A stale `Out` report must not override a newer `Active`, `Questionable`, or other non-absent status.
+
+Completion criteria:
+- [x] Roster features include `Out` and `Doubtful` players reported in the 7-day window.
+- [x] Future injury reports are excluded.
+- [x] Latest report wins when multiple reports exist for a player.
+- [x] Focused feature tests cover the above behavior.
+
+### Task 0.2 - Fix betting line uniqueness before Odds API activation
+
+`betting_lines` currently uses `(game_id, market, sportsbook)` as its unique key. That is correct for one game total per book, but wrong for player props because every player in a game can share the same market and sportsbook. The key must include `player_id`.
+
+Game-level markets use `player_id = NULL`, so the PostgreSQL constraint must still make repeated game-total upserts deterministic. Use `NULLS NOT DISTINCT` or an equivalent unique-index strategy.
+
+Completion criteria:
+- [x] Alembic migration replaces `uq_betting_game_market_book` with a player-aware unique constraint.
+- [x] SQLAlchemy model metadata matches the database constraint.
+- [x] `upsert_betting_lines()` uses the same conflict target.
+- [x] Focused ingestion tests assert the generated PostgreSQL upsert target.
+
+### Task 0.3 - Verify production assumptions before data repair
+
+The following items are reported but must be verified against Supabase/Railway before treating them as facts:
+- Injury ingestion last successful run was 2026-05-20.
+- Game `401873342` on 2026-05-21 has zero player logs.
+- `ODDS_API_KEY` is present for the relevant Railway services.
+
+Do not retrain models until these checks and any required backfills are complete.
 
 ---
 
