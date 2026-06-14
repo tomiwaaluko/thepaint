@@ -47,7 +47,7 @@ markdown, no backticks, no explanation. Use exactly this schema:
   "notes": "string or null"
 }
 If return_date is uncertain, use null. Never guess dates."""
-GEMINI_MODEL = "gemini-2.0-flash-001"
+GEMINI_MODEL = settings.GEMINI_MODEL
 
 _VALID_STATUSES = {"Active", "Questionable", "Doubtful", "Out"}
 _SUFFIX_TOKENS = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"}

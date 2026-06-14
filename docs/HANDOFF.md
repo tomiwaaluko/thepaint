@@ -61,6 +61,9 @@ Current scope:
 - CodeRabbit cleanup full suite: `pytest tests/ -v`: 252 passed, 4 warnings.
 - Baseline evaluator smoke after cleanup: `python scripts/evaluate_baseline.py --season 2024-25 --stats pts --max-rows 5 --output .cache/baseline_smoke_review_fix.json`.
   - `pts`: MAE 8.147, RMSE 8.625, bias -1.381.
+- Gemini model fix compile check: `python -m py_compile chalk/config.py chalk/ingestion/injury_fetcher.py tests/test_ingestion/test_injury_fetcher.py`: passed.
+- Gemini model fix tests: `pytest tests/test_ingestion/test_injury_fetcher.py tests/test_scaffold.py::TestConfig -v`: 23 passed.
+- Gemini model fix ingestion tests: `pytest tests/test_ingestion/ -v`: 59 passed, 4 warnings.
 
 ## Production Audit
 
@@ -68,11 +71,15 @@ Current scope:
 - Game `401873342` is final on 2026-05-21 with 0 player logs, but duplicate game `0042500302` has 26 player logs.
 - There are 18 duplicate matchup groups; many duplicate pairs have logs on both IDs, so the migration now merges child rows before adding `uq_game_matchup`.
 - Production Alembic version was `c3d4e5f6a7b8` at audit time; branch migrations are not yet applied.
-- Railway MCP/CLI are not linked to a project in this session, so Railway env vars/logs were not verified.
+- Railway project `chalk` is available with `production` and `staging` environments.
+- `ODDS_API_KEY` is set on `web`, `ingest`, and `prediction` in both production and staging.
+- Railway ingest/prediction logs show injury extraction failed because deprecated Gemini model IDs (`gemini-2.0-flash` / `gemini-2.0-flash-001`) return `404 NOT_FOUND`; this branch now defaults `GEMINI_MODEL` to `gemini-2.5-flash`.
+- Staging `prediction` service config reports `python scripts/railway_prediction.py`, but the repo script is `scripts/railway_predict.py`; production uses the correct command.
 
 ## Open Items
 
-- Link Railway or pass project/environment/service IDs, then verify `ODDS_API_KEY` and ingest cron logs.
+- After deploy, verify injury ingestion inserts rows instead of logging Gemini `404 NOT_FOUND`.
+- Fix staging `prediction` service start command to `python scripts/railway_predict.py` if Railway does not pick up `railway.predict.json`.
 - Apply migrations only as part of the deploy flow after this code is merged/deployed, because `uq_game_matchup` requires the updated `upsert_games()` duplicate guard.
 - Run full baseline: `python scripts/evaluate_baseline.py --season 2024-25 --stats pts reb ast fg3m stl blk to_committed`.
 - Retraining remains pending until the full baseline is recorded and data repair is deployed.
