@@ -9,17 +9,19 @@ from chalk.ingestion.nba_fetcher import (
     _build_rows_from_espn_boxscore,
     _build_rows_from_live_boxscore,
     _cache_path,
+    _canonicalize_game_rows,
     _espn_event_is_playoffs,
+    _fetch_with_backoff,
     _is_nba_game_id,
     _parse_espn_scoreboard_events,
     _parse_live_minutes,
     _parse_minutes,
     _parse_matchup,
-    _fetch_with_backoff,
     _reconcile_espn_scoreboard_games,
     ingest_game_boxscores_espn,
     ingest_player_season,
     ingest_team_season,
+    ingest_today_scoreboard,
 )
 
 
@@ -144,6 +146,116 @@ class TestReconcileEspnGameIds:
             espn_games,
         )
         assert reconciled[0]["GAME_ID"] == "0022500916"
+
+
+class TestCanonicalGameIds:
+    @pytest.mark.asyncio
+    async def test_maps_duplicate_matchup_to_existing_game_id(self):
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = "401859967"
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        rows, game_id_map = await _canonicalize_game_rows(
+            mock_session,
+            [
+                {
+                    "game_id": "0042500405",
+                    "date": date(2026, 6, 13),
+                    "season": "2025-26",
+                    "home_team_id": 1610612759,
+                    "away_team_id": 1610612752,
+                    "is_playoffs": True,
+                }
+            ],
+        )
+
+        assert rows[0]["game_id"] == "401859967"
+        assert game_id_map == {"0042500405": "401859967"}
+
+    @pytest.mark.asyncio
+    async def test_collapses_duplicate_matchups_in_same_batch(self):
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        rows, game_id_map = await _canonicalize_game_rows(
+            mock_session,
+            [
+                {
+                    "game_id": "0042500405",
+                    "date": date(2026, 6, 13),
+                    "season": "2025-26",
+                    "home_team_id": 1610612759,
+                    "away_team_id": 1610612752,
+                    "is_playoffs": True,
+                },
+                {
+                    "game_id": "401859967",
+                    "date": date(2026, 6, 13),
+                    "season": "2025-26",
+                    "home_team_id": 1610612759,
+                    "away_team_id": 1610612752,
+                    "is_playoffs": True,
+                },
+            ],
+        )
+
+        assert len(rows) == 1
+        assert rows[0]["game_id"] == "0042500405"
+        assert game_id_map == {
+            "0042500405": "0042500405",
+            "401859967": "0042500405",
+        }
+
+
+class TestIngestTodayScoreboard:
+    @pytest.mark.asyncio
+    async def test_invalid_scoreboard_headers_use_fallback(self):
+        mock_board = MagicMock()
+        mock_board.get_normalized_dict.return_value = {
+            "GameHeader": [
+                {
+                    "GAME_ID": "0042500405",
+                    "HOME_TEAM_ID": None,
+                    "VISITOR_TEAM_ID": 1610612752,
+                }
+            ]
+        }
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        with (
+            patch("chalk.ingestion.nba_fetcher.scoreboardv2.ScoreboardV2", return_value=mock_board),
+            patch("chalk.ingestion.nba_fetcher._fetch_scoreboard_cdn", AsyncMock(return_value=[])),
+            patch(
+                "chalk.ingestion.nba_fetcher._fetch_scoreboard_espn",
+                AsyncMock(
+                    return_value=[
+                        {
+                            "ESPN_EVENT_ID": "401859967",
+                            "GAME_ID": "401859967",
+                            "HOME_TEAM_ID": 1610612759,
+                            "VISITOR_TEAM_ID": 1610612752,
+                            "IS_PLAYOFFS": True,
+                            "STATUS": "Final",
+                        }
+                    ]
+                ),
+            ),
+            patch("chalk.ingestion.nba_fetcher.upsert_games", AsyncMock()) as upsert_games,
+        ):
+            count = await ingest_today_scoreboard(mock_session, date(2026, 6, 13))
+
+        assert count == 1
+        upsert_games.assert_awaited_once()
+        inserted_rows = upsert_games.await_args.args[1]
+        assert inserted_rows[0]["game_id"] == "401859967"
+        assert inserted_rows[0]["home_team_id"] == 1610612759
 
 
 class TestEspnBoxscoreRows:
