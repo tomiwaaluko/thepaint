@@ -173,6 +173,42 @@ class TestCanonicalGameIds:
         assert rows[0]["game_id"] == "401859967"
         assert game_id_map == {"0042500405": "401859967"}
 
+    @pytest.mark.asyncio
+    async def test_collapses_duplicate_matchups_in_same_batch(self):
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        rows, game_id_map = await _canonicalize_game_rows(
+            mock_session,
+            [
+                {
+                    "game_id": "0042500405",
+                    "date": date(2026, 6, 13),
+                    "season": "2025-26",
+                    "home_team_id": 1610612759,
+                    "away_team_id": 1610612752,
+                    "is_playoffs": True,
+                },
+                {
+                    "game_id": "401859967",
+                    "date": date(2026, 6, 13),
+                    "season": "2025-26",
+                    "home_team_id": 1610612759,
+                    "away_team_id": 1610612752,
+                    "is_playoffs": True,
+                },
+            ],
+        )
+
+        assert len(rows) == 1
+        assert rows[0]["game_id"] == "0042500405"
+        assert game_id_map == {
+            "0042500405": "0042500405",
+            "401859967": "0042500405",
+        }
+
 
 class TestIngestTodayScoreboard:
     @pytest.mark.asyncio

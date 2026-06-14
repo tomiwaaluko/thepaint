@@ -243,6 +243,7 @@ async def _canonicalize_game_rows(
     """Map incoming duplicate matchup game IDs to the existing stored game ID."""
     canonical_rows: list[dict] = []
     game_id_map: dict[str, str] = {}
+    matchup_id_map: dict[tuple[date, int, int], str] = {}
 
     for row in game_rows:
         home_team_id = row.get("home_team_id")
@@ -250,6 +251,21 @@ async def _canonicalize_game_rows(
         if not home_team_id or not away_team_id:
             game_id_map[row["game_id"]] = row["game_id"]
             canonical_rows.append(row)
+            continue
+
+        matchup_key = (row["date"], home_team_id, away_team_id)
+        batch_game_id = matchup_id_map.get(matchup_key)
+        if batch_game_id:
+            game_id_map[row["game_id"]] = batch_game_id
+            log.info(
+                "game_id_canonicalized",
+                incoming_game_id=row["game_id"],
+                canonical_game_id=batch_game_id,
+                date=str(row["date"]),
+                home_team_id=home_team_id,
+                away_team_id=away_team_id,
+                source="batch",
+            )
             continue
 
         existing_game_id = await _existing_game_id_for_matchup(
@@ -260,6 +276,7 @@ async def _canonicalize_game_rows(
         )
         canonical_game_id = existing_game_id or row["game_id"]
         game_id_map[row["game_id"]] = canonical_game_id
+        matchup_id_map[matchup_key] = canonical_game_id
 
         if existing_game_id and existing_game_id != row["game_id"]:
             log.info(
