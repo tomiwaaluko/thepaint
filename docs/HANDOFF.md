@@ -11,12 +11,16 @@ Use this file when switching Codex accounts or starting a fresh session. It keep
 
 ## Current Goal
 
-Implement the pre-flight accuracy fixes before Wave 1 on branch `fix/injury-odds-preflight`.
+Implement the pre-flight and Wave 1 accuracy fixes on branch `fix/injury-odds-preflight`.
 
 Current scope:
 - Fix roster injury feature lookup to use a 7-day, latest-report-wins window.
 - Fix `betting_lines` uniqueness/upsert targeting so player props do not overwrite each other.
-- Record production verification items before data repair or retraining.
+- Merge duplicate physical games and prevent future duplicate matchup rows.
+- Activate Odds API cron ingestion with internal game/player resolution.
+- Add sparse Vegas-line features to `generate_features()`.
+- Add baseline MAE evaluation tooling before retraining.
+- Record production verification items before deployment or retraining.
 
 ## Working Notes
 
@@ -26,7 +30,7 @@ Current scope:
 - For FastAPI changes under `chalk/api/`, follow the repo `api-patterns` skill/instructions.
 - For ingestion changes under `chalk/ingestion/` or ingestion scripts, follow the repo `data-ingestion` skill/instructions.
 - For feature changes under `chalk/features/`, follow the repo `feature-engineering` skill/instructions and preserve the `as_of_date` leakage rule.
-- Do not activate Odds API cron calls or retrain models until the production injury/log assumptions are verified.
+- Do not retrain models until migrations/data repair are deployed and a full 2024-25 baseline run is recorded.
 - The generated snapshot can be refreshed manually with `powershell -ExecutionPolicy Bypass -File scripts/update_handoff.ps1`.
 - For automatic refresh while working, keep this running in a PowerShell window: `powershell -ExecutionPolicy Bypass -File scripts/start_handoff_watcher.ps1`. Stop it with `powershell -ExecutionPolicy Bypass -File scripts/stop_handoff_watcher.ps1`.
 - To try launching it in the background from a normal terminal, run `powershell -ExecutionPolicy Bypass -File scripts/launch_handoff_watcher.ps1`.
@@ -45,15 +49,29 @@ Current scope:
 - `pytest tests/test_features/test_roster.py -v`: 5 passed.
 - `pytest tests/test_ingestion/test_odds_fetcher.py -v`: 2 passed.
 - `python -m py_compile chalk/features/roster.py chalk/ingestion/odds_fetcher.py chalk/db/models.py alembic/versions/d4e5f6a7b8c9_fix_betting_line_player_uniqueness.py`: passed.
-- `pytest tests/ -v`: 239 passed, 2 failed. Failures are outside this pre-flight change:
-  - `tests/test_ingestion/test_injury_fetcher.py::TestGeminiParsing::test_extract_with_gemini_uses_raw_record_prompt` expects `gemini-2.0-flash`; current code uses `gemini-2.0-flash-001`.
-  - `tests/test_scaffold.py::TestConfig::test_settings_requires_database_url` reads a local environment `DATABASE_URL` instead of the repo default.
+- `pytest tests/test_features/ -v`: 44 passed after Vegas features.
+- `pytest tests/test_ingestion/ -v`: 58 passed after Odds API activation.
+- `pytest tests/ -v`: 251 passed, 4 warnings.
+- Baseline evaluator smoke run: `python scripts/evaluate_baseline.py --season 2024-25 --stats pts reb ast fg3m --max-rows 50 --output .cache/baseline_smoke.json`.
+  - `pts`: MAE 5.002, RMSE 6.478, bias -0.402.
+  - `reb`: MAE 2.129, RMSE 2.711, bias -0.208.
+  - `ast`: MAE 1.395, RMSE 2.033, bias 0.118.
+  - `fg3m`: MAE 1.080, RMSE 1.558, bias -0.112.
+
+## Production Audit
+
+- Supabase read-only audit confirmed `max(injuries.report_date) = 2026-05-20` and 0 injury rows after 2026-05-20.
+- Game `401873342` is final on 2026-05-21 with 0 player logs, but duplicate game `0042500302` has 26 player logs.
+- There are 18 duplicate matchup groups; many duplicate pairs have logs on both IDs, so the migration now merges child rows before adding `uq_game_matchup`.
+- Production Alembic version was `c3d4e5f6a7b8` at audit time; branch migrations are not yet applied.
+- Railway MCP/CLI are not linked to a project in this session, so Railway env vars/logs were not verified.
 
 ## Open Items
 
-- Verify Railway/Supabase claims before data repair: injury cron stopped after 2026-05-20, game `401873342` on 2026-05-21 has zero player logs, and `ODDS_API_KEY` is configured for the relevant Railway services.
-- Decide separately whether to fix the unrelated Gemini model-name test/code mismatch.
-- Rerun the full suite in a sanitized environment without local production-style env vars before PR handoff.
+- Link Railway or pass project/environment/service IDs, then verify `ODDS_API_KEY` and ingest cron logs.
+- Apply migrations only as part of the deploy flow after this code is merged/deployed, because `uq_game_matchup` requires the updated `upsert_games()` duplicate guard.
+- Run full baseline: `python scripts/evaluate_baseline.py --season 2024-25 --stats pts reb ast fg3m stl blk to_committed`.
+- Retraining remains pending until the full baseline is recorded and data repair is deployed.
 
 ## Next Session Prompt
 

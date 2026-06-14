@@ -116,6 +116,19 @@ class TestGenerateFeatures:
         # Total: ~74
         assert len(features) >= 60
 
+    @pytest.mark.asyncio
+    async def test_includes_sparse_vegas_features(self, pipeline_db):
+        features = await generate_features(
+            pipeline_db, PLAYER_ID, "0022303005", date(2024, 1, 20),
+        )
+
+        assert features["vegas_pts_line"] == 0.0
+        assert features["vegas_reb_line"] == 0.0
+        assert features["vegas_ast_line"] == 0.0
+        assert features["vegas_fg3m_line"] == 0.0
+        assert features["vegas_game_total"] == 0.0
+        assert features["vegas_has_line"] == 0.0
+
 
 class TestBuildTrainingMatrix:
     @pytest.mark.asyncio

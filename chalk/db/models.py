@@ -50,6 +50,9 @@ class Player(Base):
 
 class Game(Base):
     __tablename__ = "games"
+    __table_args__ = (
+        UniqueConstraint("date", "home_team_id", "away_team_id", name="uq_game_matchup"),
+    )
 
     game_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     date: Mapped[date] = mapped_column(Date, nullable=False)

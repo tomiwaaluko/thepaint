@@ -1,7 +1,7 @@
 # Accuracy Improvement Plan
 
 **Last updated:** 2026-06-14
-**Status:** Pre-flight implementation in progress before Wave 1
+**Status:** Wave 1 implementation in progress; production deployment pending
 
 ---
 
@@ -12,9 +12,16 @@ This plan was derived from reading the full codebase and querying production Sup
 Production state at time of writing:
 - 13,314 games in DB (playoffs through 2026-05-30)
 - 154,718 player game logs
-- 0 betting lines (Odds API wired in code but stubbed in cron)
+- 45 betting lines at last read-only audit; Odds API code existed but Railway cron was still stubbed locally before this branch
 - Duplicate game records: ESPN-style `401...` IDs (have stats) coexist with NBA API `004...` IDs (empty shells) for the same games
 - Models trained on 2015-2024 regular season; currently predicting 2025-26 playoffs with no playoff-specific adjustment
+
+Read-only production audit on 2026-06-14:
+- `max(injuries.report_date)` is 2026-05-20 and there are 0 injury rows after that date.
+- Game `401873342` is final on 2026-05-21 with 0 player logs, but its duplicate NBA-format game row `0042500302` has 26 player logs.
+- There are 18 duplicate matchup groups, not just one; many duplicate `004...` rows already have player logs.
+- Production Alembic version is `c3d4e5f6a7b8`; migrations in this branch are not yet applied.
+- Railway logs and service variables could not be checked because Railway is not linked in this session.
 
 ---
 
@@ -48,12 +55,13 @@ Completion criteria:
 
 ### Task 0.3 - Verify production assumptions before data repair
 
-The following items are reported but must be verified against Supabase/Railway before treating them as facts:
-- Injury ingestion last successful run was 2026-05-20.
-- Game `401873342` on 2026-05-21 has zero player logs.
-- `ODDS_API_KEY` is present for the relevant Railway services.
+The following items were checked against Supabase; Railway remains blocked until the project is linked:
+- [x] Injury ingestion last successful DB report date is 2026-05-20.
+- [x] Game `401873342` on 2026-05-21 has zero player logs.
+- [x] Duplicate `0042500302` for the same physical game has 26 player logs, so data repair should merge canonical game IDs rather than simply backfill `401873342`.
+- [ ] `ODDS_API_KEY` is present for the relevant Railway services.
 
-Do not retrain models until these checks and any required backfills are complete.
+Do not retrain models until these checks and any required migration/data repair are deployed.
 
 ---
 
@@ -68,38 +76,25 @@ Do not retrain models until these checks and any required backfills are complete
 ### Task 1.1 — Fix Duplicate Game IDs
 
 **Problem:**
-`ingest_today_scoreboard` in `chalk/ingestion/nba_fetcher.py` creates game records with NBA API format IDs (`004...`). When the ESPN boxscore fallback runs (`ingest_game_boxscores_espn`), it creates *new* game records with ESPN-style IDs (`401...`) for the same physical game. Both IDs persist in the `games` table. Player logs attach to the `401...` ID. The `004...` shells sit empty.
+`ingest_today_scoreboard` can create NBA API format IDs (`004...`) while ESPN fallback paths can create ESPN-style IDs (`401...`) for the same physical game. Both IDs can persist in the `games` table. A 2026-06-14 audit showed this is not limited to empty `004...` shells; several duplicate pairs have player logs on both IDs, and at least one reported missing-log ESPN row has logs on its duplicate NBA-format row.
 
 **Evidence from production:**
 ```
 game_id=401873203  date=2026-05-30  status=final  player_logs=19   <- has stats
 game_id=0042500317 date=2026-05-30  status=scheduled  player_logs=0  <- empty shell
+game_id=401873342  date=2026-05-21  status=final  player_logs=0
+game_id=0042500302 date=2026-05-21  status=final  player_logs=26
 ```
 
 **Files to change:**
-- `chalk/ingestion/nba_fetcher.py` — `ingest_today_scoreboard()` and `upsert_games()`
-- `alembic/versions/` — new migration to backfill/delete orphan `004...` records
+- `chalk/ingestion/seed.py` - `upsert_games()`
+- `chalk/db/models.py` - `Game` matchup uniqueness
+- `alembic/versions/` - migration to merge duplicate game IDs and add `uq_game_matchup`
 
 **Implementation steps:**
 
-1. **Migration to clean existing orphan records:**
-   Using Supabase MCP `apply_migration`, run:
-   ```sql
-   -- Delete empty-shell 004... game records that have no player_game_logs
-   -- and whose date+home_team_id+away_team_id matches an existing 401... record
-   DELETE FROM games g1
-   WHERE g1.game_id LIKE '004%'
-     AND NOT EXISTS (
-       SELECT 1 FROM player_game_logs pgl WHERE pgl.game_id = g1.game_id
-     )
-     AND EXISTS (
-       SELECT 1 FROM games g2
-       WHERE g2.game_id NOT LIKE '004%'
-         AND g2.date = g1.date
-         AND g2.home_team_id = g1.home_team_id
-         AND g2.away_team_id = g1.away_team_id
-     );
-   ```
+1. **Migration to merge existing duplicate records:**
+   Pick the canonical game row per `(date, home_team_id, away_team_id)` by highest player-log count, move non-conflicting child rows from duplicate IDs, delete duplicate child rows that already exist on the canonical game, delete duplicate games, and then create `uq_game_matchup`.
 
 2. **Prevent future duplicates:**
    Add a unique constraint on `(date, home_team_id, away_team_id)` to `games` table so the same physical game cannot be inserted twice regardless of ID format:
@@ -107,17 +102,21 @@ game_id=0042500317 date=2026-05-30  status=scheduled  player_logs=0  <- empty sh
    ALTER TABLE games
    ADD CONSTRAINT uq_game_matchup UNIQUE (date, home_team_id, away_team_id);
    ```
-   Note: Apply this *after* the delete above, not before.
+   Note: Apply this after the merge above, not before.
 
-3. **Code change — prefer ESPN ID in `upsert_games`:**
-   When `ingest_today_scoreboard` creates a game, check if a record already exists for `(date, home_team_id, away_team_id)`. If yes, skip insertion. This prevents the CDN/scoreboard path from creating ghost `004...` records when the ESPN path already ran.
+3. **Code change - prevent future duplicate matchups in `upsert_games`:**
+   When any game ingest path creates a game, check if a record already exists for `(date, home_team_id, away_team_id)`. If yes and the incoming ID differs, skip insertion and keep the existing canonical game row.
 
 **Verification using Supabase MCP:**
 ```sql
 -- Should return 0 after fix
-SELECT COUNT(*) FROM games
-WHERE game_id LIKE '004%'
-  AND NOT EXISTS (SELECT 1 FROM player_game_logs WHERE game_id = games.game_id);
+SELECT COUNT(*)
+FROM (
+  SELECT date, home_team_id, away_team_id
+  FROM games
+  GROUP BY date, home_team_id, away_team_id
+  HAVING COUNT(*) > 1
+) duplicate_matchups;
 ```
 
 ---
@@ -125,7 +124,7 @@ WHERE game_id LIKE '004%'
 ### Task 1.2 — Plug in the Odds API (Vegas Lines)
 
 **Problem:**
-`fetch_player_props()` exists in `chalk/ingestion/odds_fetcher.py` but step 5 of `scripts/railway_ingest.py` is **explicitly stubbed** — it only counts today's games and logs, never calls the fetcher. The `betting_lines` table has 0 rows.
+`fetch_player_props()` existed in `chalk/ingestion/odds_fetcher.py` but step 5 of `scripts/railway_ingest.py` was stubbed before this branch — it only counted today's games and logs, never called the fetcher.
 
 Additionally, `odds_fetcher.py` has a game ID mismatch: the Odds API returns its own internal event IDs, not NBA game IDs. Storing them raw means they can never JOIN to the `games` table.
 
@@ -137,10 +136,10 @@ Additionally, `odds_fetcher.py` has a game ID mismatch: the Odds API returns its
 **Implementation steps:**
 
 1. **Fix `odds_fetcher.py` — game ID resolution:**
-   After fetching events from the Odds API, resolve each event to an NBA `game_id` by matching on `commence_time` date + home/away team name. Use the `teams` table abbreviation/name for fuzzy matching.
+   After fetching events from the Odds API, resolve each event to an internal `game_id` by matching Eastern game date + home/away team name. Prefer the matching game row with the most player logs if duplicate game IDs exist before migration.
 
 2. **Fix `odds_fetcher.py` — player ID resolution:**
-   Player prop outcomes include player name strings (e.g., `"Shai Gilgeous-Alexander"`). Apply the same three-tier name normalization already built in `chalk/ingestion/injury_fetcher.py` (DB lookup → nba_api static → hardcoded fallback) to resolve to `player_id`.
+   Player prop outcomes include player name strings in the `description` field. Reuse `resolve_player_id()` from `chalk/ingestion/injury_fetcher.py` to resolve to `player_id`.
 
 3. **Activate in `railway_ingest.py`:**
    Replace the step 5 stub with:
@@ -157,7 +156,7 @@ Additionally, `odds_fetcher.py` has a game ID mismatch: the Odds API returns its
    ```
 
 4. **Add `vegas_line` as a feature:**
-   Once data is flowing, add a new feature function in `chalk/features/` (e.g., `vegas.py`) with:
+   Add `chalk/features/vegas.py` with:
    - `get_player_prop_line(player_id, stat, game_date)` → float (the market line for that stat)
    - `get_game_total_line(game_id, game_date)` → float (implied game total)
 
@@ -185,10 +184,15 @@ GROUP BY market ORDER BY COUNT(*) DESC;
 ---
 
 ### Wave 1 Completion Criteria
-- [ ] Zero orphan `004...` game records with no player logs
-- [ ] No duplicate records for same physical game
-- [ ] `betting_lines` table has rows after next cron run
-- [ ] Lines JOIN correctly to `games` and `players` tables
+- [x] Migration added to merge duplicate physical game records and create `uq_game_matchup`
+- [x] `upsert_games()` skips future duplicate matchup inserts
+- [x] Odds fetcher resolves Odds API events to internal `games.game_id`
+- [x] Odds fetcher resolves player prop outcome descriptions to `players.player_id`
+- [x] Railway ingest script calls `fetch_player_props()` and `fetch_game_totals()`
+- [x] Vegas-line features are added to `generate_features()`
+- [ ] Migrations applied in production
+- [ ] Railway `ODDS_API_KEY` verified on `web`/`ingest`
+- [ ] `betting_lines` table verified after next deployed cron run
 
 ---
 
