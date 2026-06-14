@@ -7,6 +7,7 @@ import pytest
 from chalk.db.models import Player, Team
 from chalk.ingestion import injury_fetcher
 from chalk.ingestion.injury_fetcher import (
+    GEMINI_MODEL,
     MISSING_GEMINI_KEY_MESSAGE,
     _extract_espn_player_records,
     _extract_with_gemini,
@@ -122,7 +123,7 @@ class TestGeminiParsing:
 
         assert parsed["player_name"] == "LeBron James"
         assert parsed["status"] == "Out"
-        assert client.models.generate_content.call_args.kwargs["model"] == "gemini-2.0-flash"
+        assert client.models.generate_content.call_args.kwargs["model"] == GEMINI_MODEL
         prompt = client.models.generate_content.call_args.kwargs["contents"]
         assert "Player: LeBron James" in prompt
         assert "Notes: Ankle" in prompt

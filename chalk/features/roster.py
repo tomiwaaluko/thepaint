@@ -1,11 +1,13 @@
 """Roster and injury context features."""
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chalk.db.models import Injury, Player, PlayerGameLog
+from chalk.db.models import Injury, Player
 from chalk.features.rolling import get_rolling_avg
+
+ABSENT_INJURY_STATUSES = {"out", "doubtful"}
 
 
 async def get_absent_players(
@@ -13,15 +15,30 @@ async def get_absent_players(
     team_id: int,
     game_date: date,
 ) -> list[Player]:
-    """Players with status 'Out' or 'Doubtful' on the given date."""
+    """Players whose latest injury report in the lookback window is absent."""
+    recent_cutoff = game_date - timedelta(days=7)
     result = await session.execute(
-        select(Player)
+        select(Player, Injury)
         .join(Injury, Injury.player_id == Player.player_id)
         .where(Player.team_id == team_id)
-        .where(Injury.report_date == game_date)
-        .where(Injury.status.in_(["Out", "Doubtful"]))
+        .where(Injury.report_date <= game_date)
+        .where(Injury.report_date >= recent_cutoff)
+        .order_by(Player.player_id, Injury.report_date.desc())
     )
-    return list(result.scalars().all())
+    rows = result.all()
+
+    absent_players: list[Player] = []
+    seen_player_ids: set[int] = set()
+    for player, injury in rows:
+        if player.player_id in seen_player_ids:
+            continue
+        seen_player_ids.add(player.player_id)
+
+        status = (injury.status or "").strip().lower()
+        if status in ABSENT_INJURY_STATUSES:
+            absent_players.append(player)
+
+    return absent_players
 
 
 async def get_roster_features(

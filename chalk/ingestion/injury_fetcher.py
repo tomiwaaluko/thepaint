@@ -47,6 +47,7 @@ markdown, no backticks, no explanation. Use exactly this schema:
   "notes": "string or null"
 }
 If return_date is uncertain, use null. Never guess dates."""
+GEMINI_MODEL = settings.GEMINI_MODEL
 
 _VALID_STATUSES = {"Active", "Questionable", "Doubtful", "Out"}
 _SUFFIX_TOKENS = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"}
@@ -279,7 +280,7 @@ def _build_gemini_prompt(record: dict[str, str]) -> str:
 
 async def _extract_with_gemini(client: Any, record: dict[str, str]) -> dict[str, Any] | None:
     response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
+        model=GEMINI_MODEL,
         config=types.GenerateContentConfig(
             system_instruction=GEMINI_SYSTEM_INSTRUCTION,
         ),
