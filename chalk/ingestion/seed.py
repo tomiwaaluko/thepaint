@@ -115,6 +115,16 @@ async def upsert_games(session: AsyncSession, game_rows: list[dict]) -> None:
     filtered_rows = []
     seen_matchups: set[tuple] = set()
     for row in game_rows:
+        if not row["home_team_id"] or not row["away_team_id"]:
+            log.warning(
+                "game_invalid_team_ids_skipped",
+                incoming_game_id=row["game_id"],
+                date=str(row["date"]),
+                home_team_id=row["home_team_id"],
+                away_team_id=row["away_team_id"],
+            )
+            continue
+
         matchup_key = (row["date"], row["home_team_id"], row["away_team_id"])
         if matchup_key in seen_matchups:
             log.info(

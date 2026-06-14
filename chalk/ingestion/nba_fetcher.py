@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import inspect
 import json
 import random
 import re
@@ -213,6 +214,67 @@ async def _nba_game_id_for_matchup(
         if _is_nba_game_id(game_id):
             return game_id
     return None
+
+
+async def _existing_game_id_for_matchup(
+    session: AsyncSession,
+    game_date: date,
+    home_team_id: int,
+    away_team_id: int,
+) -> str | None:
+    """Return any existing game_id for this matchup."""
+    result = await session.execute(
+        select(Game.game_id).where(
+            Game.date == game_date,
+            Game.home_team_id == home_team_id,
+            Game.away_team_id == away_team_id,
+        )
+    )
+    scalars = result.scalars()
+    if inspect.isawaitable(scalars):
+        scalars = await scalars
+    return scalars.first()
+
+
+async def _canonicalize_game_rows(
+    session: AsyncSession,
+    game_rows: list[dict],
+) -> tuple[list[dict], dict[str, str]]:
+    """Map incoming duplicate matchup game IDs to the existing stored game ID."""
+    canonical_rows: list[dict] = []
+    game_id_map: dict[str, str] = {}
+
+    for row in game_rows:
+        home_team_id = row.get("home_team_id")
+        away_team_id = row.get("away_team_id")
+        if not home_team_id or not away_team_id:
+            game_id_map[row["game_id"]] = row["game_id"]
+            canonical_rows.append(row)
+            continue
+
+        existing_game_id = await _existing_game_id_for_matchup(
+            session,
+            row["date"],
+            home_team_id,
+            away_team_id,
+        )
+        canonical_game_id = existing_game_id or row["game_id"]
+        game_id_map[row["game_id"]] = canonical_game_id
+
+        if existing_game_id and existing_game_id != row["game_id"]:
+            log.info(
+                "game_id_canonicalized",
+                incoming_game_id=row["game_id"],
+                canonical_game_id=existing_game_id,
+                date=str(row["date"]),
+                home_team_id=home_team_id,
+                away_team_id=away_team_id,
+            )
+            canonical_rows.append({**row, "game_id": existing_game_id})
+        else:
+            canonical_rows.append(row)
+
+    return canonical_rows, game_id_map
 
 
 async def _reconcile_espn_scoreboard_games(
@@ -675,6 +737,20 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
     except Exception as e:
         log.warning("scoreboard_fetch_failed", date=date_str, error=str(e))
 
+    if headers_list:
+        invalid_headers = [
+            g for g in headers_list
+            if not g.get("HOME_TEAM_ID") or not g.get("VISITOR_TEAM_ID")
+        ]
+        if invalid_headers:
+            log.warning(
+                "scoreboard_invalid_team_ids",
+                date=date_str,
+                invalid_count=len(invalid_headers),
+                games=len(headers_list),
+            )
+            headers_list = None
+
     # CDN fallback when ScoreboardV2 fails or returns empty
     if not headers_list:
         try:
@@ -923,6 +999,10 @@ async def ingest_player_season(
         })
 
     # Upsert game records first (FK: games), then game logs
+    game_rows, game_id_map = await _canonicalize_game_rows(session, game_rows)
+    for row in rows:
+        row["game_id"] = game_id_map.get(row["game_id"], row["game_id"])
+
     await upsert_games(session, game_rows)
     await session.commit()
     return await upsert_player_game_logs(session, rows)
@@ -1010,6 +1090,10 @@ async def ingest_team_season(session: AsyncSession, season: str) -> int:
         })
 
     # Upsert games first, then team logs
+    game_rows, game_id_map = await _canonicalize_game_rows(session, game_rows)
+    for row in rows:
+        row["game_id"] = game_id_map.get(row["game_id"], row["game_id"])
+
     await upsert_games(session, game_rows)
     await session.commit()
     return await upsert_team_game_logs(session, rows)
