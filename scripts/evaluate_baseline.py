@@ -38,6 +38,7 @@ RAW_STATS = {
 
 
 def _load_best_available_model(stat: str):
+    """Load the preferred saved model for a stat."""
     if stat in LGBM_STATS:
         try:
             return load_lgbm_model(stat)
@@ -47,6 +48,7 @@ def _load_best_available_model(stat: str):
 
 
 def _align_features(features: list[dict], expected_cols: list[str]) -> pd.DataFrame:
+    """Convert feature dictionaries into a model-aligned frame."""
     df = pd.DataFrame(features)
     aligned = pd.DataFrame(index=df.index)
     for col in expected_cols:
@@ -55,6 +57,7 @@ def _align_features(features: list[dict], expected_cols: list[str]) -> pd.DataFr
 
 
 def _align_feature_frame(df: pd.DataFrame, expected_cols: list[str]) -> pd.DataFrame:
+    """Align an existing feature frame to a saved model's columns."""
     aligned = pd.DataFrame(index=df.index)
     for col in expected_cols:
         aligned[col] = df[col] if col in df.columns else 0.0
@@ -67,6 +70,7 @@ def _score_stat(
     X: pd.DataFrame,
     y: pd.Series | np.ndarray,
 ) -> dict:
+    """Score one stat model against an aligned feature matrix."""
     model = _load_best_available_model(stat)
     expected_cols = model.feature_names or list(X.columns)
     aligned = _align_feature_frame(X, expected_cols)
@@ -76,7 +80,7 @@ def _score_stat(
     return {
         "season": season,
         "stat": stat,
-        "rows": int(len(y_arr)),
+        "rows": len(y_arr),
         "mae": float(np.mean(np.abs(errors))),
         "rmse": float(np.sqrt(np.mean(errors**2))),
         "bias": float(np.mean(errors)),
@@ -100,8 +104,8 @@ async def _bulk_eval_matrix(
         select(func.min(PlayerGameLog.game_date), func.max(PlayerGameLog.game_date))
         .where(PlayerGameLog.season == season)
     )
-    min_date, max_date = date_range.one()
-    if min_date is None or max_date is None:
+    _, max_date = date_range.one()
+    if max_date is None:
         return pd.DataFrame()
 
     logs_result = await session.execute(
@@ -253,7 +257,7 @@ async def _bulk_eval_matrix(
 
     if not tgl.empty:
         opp_feat_cols = [c for c in tgl.columns if c.endswith(("_avg_10g", "_avg_15g"))]
-        tgl_merge = tgl[["team_id", "game_date"] + opp_feat_cols].rename(
+        tgl_merge = tgl[["team_id", "game_date", *opp_feat_cols]].rename(
             columns={"team_id": "opp_team_id"}
         )
         df = df.merge(tgl_merge, on=["opp_team_id", "game_date"], how="left", suffixes=("", "_dup"))
@@ -278,6 +282,7 @@ async def _bulk_eval_matrix(
 
 
 async def _qualified_logs(session, season: str, min_games: int, max_rows: int | None):
+    """Fetch season logs for players meeting the minimum game threshold."""
     qualified_subq = (
         select(PlayerGameLog.player_id)
         .where(PlayerGameLog.season == season)
@@ -305,6 +310,7 @@ async def evaluate_baseline(
     output: Path | None,
     method: str,
 ) -> list[dict]:
+    """Evaluate saved stat models against one historical season."""
     async with async_session_factory() as session:
         if method == "bulk":
             matrix = await _bulk_eval_matrix(session, season, min_games, max_rows)
@@ -378,6 +384,7 @@ async def evaluate_baseline(
 
 
 def main() -> None:
+    """Parse CLI arguments and print baseline metrics."""
     parser = argparse.ArgumentParser(description="Evaluate saved model baseline MAE")
     parser.add_argument("--season", default="2024-25")
     parser.add_argument("--stats", nargs="+", default=DEFAULT_STATS)
