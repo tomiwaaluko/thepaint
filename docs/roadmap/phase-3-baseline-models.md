@@ -12,8 +12,8 @@ Phase 2 complete — `generate_features()` working, `build_training_matrix()` pr
 Phase 4 (Prediction API) — needs trained models loadable from MLflow registry.
 
 ## Skill Files to Read First
-- `.claude/skills/model-training/SKILL.md` — XGBoost setup, walk-forward CV, MAE targets
-- `.claude/skills/mlflow-tracking/SKILL.md` — experiment naming, what to log, model registration
+- `.agents/skills/model-training/SKILL.md` — XGBoost setup, walk-forward CV, MAE targets
+- `.agents/skills/mlflow-tracking/SKILL.md` — experiment naming, what to log, model registration
 
 ---
 
@@ -38,7 +38,7 @@ A model that does not meet its MAE target is still logged to MLflow but NOT regi
 
 ### `chalk/models/base.py`
 
-Build following the pattern in `.claude/skills/model-training/SKILL.md`.
+Build following the pattern in `.agents/skills/model-training/SKILL.md`.
 
 **Class: `BaseStatModel`**
 
@@ -119,7 +119,7 @@ TEST_SEASON = "2023-24"
 
 **Function: `train_player_stat_model(session, stat, player_ids, run_name) → BaseStatModel`**
 
-Full implementation following `.claude/skills/model-training/SKILL.md` pattern:
+Full implementation following `.agents/skills/model-training/SKILL.md` pattern:
 
 1. Build training matrix via `build_training_matrix(session, player_ids, stat, ALL_SEASONS)`
 2. Run `check_for_leakage()` — raise if game_id/player_id in features

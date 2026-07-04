@@ -12,8 +12,8 @@ Phase 5 (Betting & Fantasy) — adds routes on top of this API.
 Phase 6 (Dashboard) — consumes this API.
 
 ## Skill Files to Read First
-- `.claude/skills/api-patterns/SKILL.md` — all route patterns, schemas, caching, error handling
-- `.claude/skills/mlflow-tracking/SKILL.md` — loading models from registry
+- `.agents/skills/api-patterns/SKILL.md` — all route patterns, schemas, caching, error handling
+- `.agents/skills/mlflow-tracking/SKILL.md` — loading models from registry
 
 ---
 
@@ -21,7 +21,7 @@ Phase 6 (Dashboard) — consumes this API.
 
 ### `chalk/api/schemas.py`
 
-Define all request and response models. Read `.claude/skills/api-patterns/SKILL.md` for the
+Define all request and response models. Read `.agents/skills/api-patterns/SKILL.md` for the
 full schema definitions before writing any code here.
 
 **Schemas to define:**
@@ -200,7 +200,7 @@ Returns DB ping status, Redis ping status, model registry status, timestamp.
 
 ## Step 8 — Redis Caching
 
-Implement full caching layer following `.claude/skills/api-patterns/SKILL.md`:
+Implement full caching layer following `.agents/skills/api-patterns/SKILL.md`:
 
 ```python
 CACHE_TTL = 900  # 15 minutes

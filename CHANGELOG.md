@@ -279,8 +279,8 @@
 - Set up `ingest` and `prediction` cron services on Railway (7 AM UTC and 6 PM UTC daily)
 - Fixed builder from Railpack to Dockerfile on both cron services
 - Clarified Supabase connection: Session Pooler (port 5432) is correct for asyncpg; Direct Connection is IPv4-incompatible on Railway
-- Added `railway-deployment` skill to `.claude/skills/`
-- Added `ensemble-tuning` skill to `.claude/skills/` for Phase 8
+- Added `railway-deployment` skill to `.agents/skills/`
+- Added `ensemble-tuning` skill to `.agents/skills/` for Phase 8
 - Updated CLAUDE.md tech stack and added Production Deployment section
 - Added Session Rules section to CLAUDE.md
 
