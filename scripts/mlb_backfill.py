@@ -18,7 +18,7 @@ from sqlalchemy import select
 from chalk.db.session import async_session_factory
 from chalk.exceptions import IngestError
 from chalk.mlb.fetcher import (
-    _is_final_status,
+    is_final_status,
     ingest_mlb_boxscore,
     ingest_mlb_schedule,
     ingest_mlb_teams,
@@ -74,7 +74,7 @@ async def backfill_season(session, season: int, completed: set[int]) -> tuple[in
     result = await session.execute(
         select(MlbGame).where(MlbGame.season == str(season)).order_by(MlbGame.date)
     )
-    games = [g for g in result.scalars().all() if _is_final_status(g.status)]
+    games = [g for g in result.scalars().all() if is_final_status(g.status)]
 
     done = 0
     skipped = 0

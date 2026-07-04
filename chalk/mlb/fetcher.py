@@ -344,7 +344,7 @@ async def _upsert_players(session: AsyncSession, payload: dict) -> int:
     return len(rows)
 
 
-async def _upsert_log_rows(session: AsyncSession, model, conflict_name: str, rows: list[dict]) -> int:
+async def _upsert_log_rows(session: AsyncSession, model, rows: list[dict]) -> int:
     if not rows:
         return 0
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -391,14 +391,14 @@ async def ingest_mlb_boxscore(session: AsyncSession, game_pk: int) -> tuple[int,
     for row in batter_rows + pitcher_rows:
         row["game_pk"] = game_pk
 
-    batters = await _upsert_log_rows(session, MlbBatterGameLog, "uq_mlb_batter_game", batter_rows)
-    pitchers = await _upsert_log_rows(session, MlbPitcherGameLog, "uq_mlb_pitcher_game", pitcher_rows)
+    batters = await _upsert_log_rows(session, MlbBatterGameLog, batter_rows)
+    pitchers = await _upsert_log_rows(session, MlbPitcherGameLog, pitcher_rows)
     await session.commit()
     log.info("mlb_boxscore_ingested", game_pk=game_pk, batters=batters, pitchers=pitchers)
     return batters, pitchers
 
 
-def _is_final_status(status: str) -> bool:
+def is_final_status(status: str) -> bool:
     return status.startswith(_FINAL_STATUS_PREFIXES)
 
 
@@ -417,7 +417,7 @@ async def ingest_mlb_date(session: AsyncSession, game_date: date) -> dict[str, i
         await session.execute(select(MlbGame).where(MlbGame.date == game_date))
     ).scalars().all()
     for game in rows:
-        if not _is_final_status(game.status):
+        if not is_final_status(game.status):
             log.info("mlb_game_not_final_skipped", game_pk=game.game_pk, status=game.status)
             continue
         batters, pitchers = await ingest_mlb_boxscore(session, game.game_pk)
