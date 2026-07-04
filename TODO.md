@@ -15,6 +15,23 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ---
 
+## Tooling — Chalk Dev Flow (2026-07-04)
+
+Added a branch-first development workflow under `.claude/` (Compound Engineering ×
+Superpowers hybrid). Not a product phase — a process scaffold for every future branch.
+
+- **What & why:** enforce the branch-naming convention (branch off `railway`, never
+  `main`) and guarantee every branch produces five specs (planning, design,
+  implementation w/ API+DB+security, testing, deployment).
+- **Files added:** `.claude/README.md`; `.claude/workflows/00`–`07-*.md` (8);
+  `.claude/commands/chalk-*.md` (9: flow, branch, brainstorm, plan, test, implement,
+  review, ship, compound); `.claude/templates/*.md` (5); `specs/` output dir.
+- **Status:** complete and ready to dogfood. No application code changed.
+- **Deferred:** optionally lift the workflows into `.agents/skills/` and reference
+  from `CLAUDE.md`.
+
+---
+
 ## Session Kickoff Prompt
 
 Paste this at the start of every Claude Code session:

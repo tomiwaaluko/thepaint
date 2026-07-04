@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-04
+
+### Done
+- Added the **Chalk Dev Flow** — a branch-first development workflow under `.claude/` combining the Compound Engineering outer loop (brainstorm → plan → work → simplify → review → compound) with Superpowers practices (git worktrees, TDD, subagent-driven review, finishing a development branch).
+- Codified the git branch-naming convention (13 prefixes) with the hard rule that all work branches off `railway` and `main` is only touched via a deliberate `railway → main` release merge.
+- Created 8 workflow files (`.claude/workflows/00`–`07`), 9 slash commands (`.claude/commands/chalk-*.md`), 5 spec templates (`.claude/templates/`), and an index README (`.claude/README.md`).
+- Each workflow run now scaffolds `specs/<branch-slug>/` with the five required specs: planning, design, implementation (API + DB + security), testing, deployment.
+
+### Metrics
+- Files added: 1 README + 8 workflows + 9 commands + 5 templates = 23 markdown files.
+- No application code touched; test suite unaffected.
+
+### Pending
+- Optionally register the workflows as first-class `.agents/skills/*/SKILL.md` entries and link them from `CLAUDE.md`.
+
+### Next
+- Dogfood the flow on the next feature branch and refine phase Definitions of Done from real usage.
+
+---
+
 ## 2026-04-16 (Phase 9 AI Injury Agent)
 
 ### Done
