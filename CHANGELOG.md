@@ -3,20 +3,24 @@
 ## 2026-07-04
 
 ### Done
-- Added the **Chalk Dev Flow** — a branch-first development workflow under `.claude/` combining the Compound Engineering outer loop (brainstorm → plan → work → simplify → review → compound) with Superpowers practices (git worktrees, TDD, subagent-driven review, finishing a development branch).
-- Codified the git branch-naming convention (13 prefixes) with the hard rule that all work branches off `railway` and `main` is only touched via a deliberate `railway → main` release merge.
-- Created 8 workflow files (`.claude/workflows/00`–`07`), 9 slash commands (`.claude/commands/chalk-*.md`), 5 spec templates (`.claude/templates/`), and an index README (`.claude/README.md`).
-- Each workflow run now scaffolds `specs/<branch-slug>/` with the five required specs: planning, design, implementation (API + DB + security), testing, deployment.
+- Added the **Chalk Dev Flow** — agentic, self-correcting Git workflows under `.claude/`, modeled on the Compound Engineering loop (brainstorm → plan → work → review → ship → compound) and adapted to Chalk.
+- Restructured to a Windsurf-style two-layer design: **one self-contained slash command per branch type** (the orchestrators) + **reusable phase skills** they invoke.
+  - 13 branch-type workflows: `.claude/commands/chalk-{feature,bugfix,hotfix,refactor,perf,experiment,chore,docs,test,style,ci,build,release}.md`.
+  - 6 phase skills: `.claude/skills/chalk-{brainstorm,plan,work,review,ship,compound}/SKILL.md`.
+  - 5 spec templates in `.claude/templates/` + an index `.claude/README.md`.
+- Each workflow is self-contained with `## MCP Integration` (uses whatever MCP servers are connected — trackers, Git hosting, CI, quality gates — no specific one assumed), `## Resuming` (skip completed phases on restart), and `## Steps` with **loop-back error recovery** (later phase fails → return to `chalk-work`/`chalk-plan`) and **loop caps** (stop after 3 no-progress rounds and ask the user).
+- Codified the branch-naming convention with the hard rule: all work branches off `railway`, PRs target `railway`, and `main` is touched only by the deliberate `railway → main` promotion inside `/chalk-release`.
+- Each run scaffolds `specs/<branch-slug>/` with the five specs: planning, design, implementation (API + DB + security), testing, deployment.
 
 ### Metrics
-- Files added: 1 README + 8 workflows + 9 commands + 5 templates = 23 markdown files.
+- 13 workflow commands + 6 phase skills + 5 templates + 1 README = 25 markdown files.
 - No application code touched; test suite unaffected.
 
 ### Pending
-- Optionally register the workflows as first-class `.agents/skills/*/SKILL.md` entries and link them from `CLAUDE.md`.
+- Dogfood on a real branch; tune per-type step lists and loop caps from usage.
 
 ### Next
-- Dogfood the flow on the next feature branch and refine phase Definitions of Done from real usage.
+- Run `/chalk-feature` on the next piece of work and refine the phase skills from what surfaces.
 
 ---
 

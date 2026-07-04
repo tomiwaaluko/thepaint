@@ -17,18 +17,24 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ## Tooling — Chalk Dev Flow (2026-07-04)
 
-Added a branch-first development workflow under `.claude/` (Compound Engineering ×
-Superpowers hybrid). Not a product phase — a process scaffold for every future branch.
+Agentic, self-correcting Git workflows under `.claude/`, Compound-Engineering-style.
+Not a product phase — a process scaffold you invoke per branch type.
 
-- **What & why:** enforce the branch-naming convention (branch off `railway`, never
-  `main`) and guarantee every branch produces five specs (planning, design,
-  implementation w/ API+DB+security, testing, deployment).
-- **Files added:** `.claude/README.md`; `.claude/workflows/00`–`07-*.md` (8);
-  `.claude/commands/chalk-*.md` (9: flow, branch, brainstorm, plan, test, implement,
-  review, ship, compound); `.claude/templates/*.md` (5); `specs/` output dir.
+- **What & why:** run one slash command per branch type (e.g. `/chalk-feature`,
+  `/chalk-bugfix`) and it drives the whole loop — branch off `railway`, produce the five
+  specs, TDD the code, ship a PR into `railway` — looping back to an earlier phase when a
+  later one fails.
+- **Structure (Windsurf-style two layers):**
+  - `.claude/commands/chalk-*.md` (13) — self-contained branch-type orchestrators with
+    `## MCP Integration`, `## Resuming`, `## Steps` (loop-backs + loop caps).
+  - `.claude/skills/chalk-*/SKILL.md` (6) — phase building blocks: brainstorm, plan,
+    work, review, ship, compound.
+  - `.claude/templates/*.md` (5); `.claude/README.md`; `specs/` output dir.
+- **Rules baked in:** branch off `railway`, PR into `railway`, `main` only via the
+  `railway → main` promotion in `/chalk-release`; MCP-aware (uses connected servers);
+  Chalk non-negotiables (`as_of_date`, upsert, async, one-model-per-stat, walk-forward).
 - **Status:** complete and ready to dogfood. No application code changed.
-- **Deferred:** optionally lift the workflows into `.agents/skills/` and reference
-  from `CLAUDE.md`.
+- **Deferred:** tune per-type steps/loop caps from real usage.
 
 ---
 
