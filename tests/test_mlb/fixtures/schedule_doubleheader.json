@@ -1,0 +1,54 @@
+{
+  "dates": [
+    {
+      "date": "2024-07-08",
+      "games": [
+        {
+          "gamePk": 746001,
+          "gameType": "R",
+          "season": "2024",
+          "gameDate": "2024-07-08T17:05:00Z",
+          "officialDate": "2024-07-08",
+          "status": {"abstractGameState": "Final", "detailedState": "Final"},
+          "teams": {
+            "away": {"team": {"id": 111, "name": "Boston Red Sox"}},
+            "home": {"team": {"id": 147, "name": "New York Yankees"}}
+          },
+          "doubleHeader": "Y",
+          "gameNumber": 1,
+          "venue": {"id": 3313, "name": "Yankee Stadium"}
+        },
+        {
+          "gamePk": 746002,
+          "gameType": "R",
+          "season": "2024",
+          "gameDate": "2024-07-08T23:05:00Z",
+          "officialDate": "2024-07-08",
+          "status": {"abstractGameState": "Final", "detailedState": "Final"},
+          "teams": {
+            "away": {"team": {"id": 111, "name": "Boston Red Sox"}},
+            "home": {"team": {"id": 147, "name": "New York Yankees"}}
+          },
+          "doubleHeader": "Y",
+          "gameNumber": 2,
+          "venue": {"id": 3313, "name": "Yankee Stadium"}
+        },
+        {
+          "gamePk": 746099,
+          "gameType": "S",
+          "season": "2024",
+          "gameDate": "2024-07-08T20:00:00Z",
+          "officialDate": "2024-07-08",
+          "status": {"abstractGameState": "Final", "detailedState": "Final"},
+          "teams": {
+            "away": {"team": {"id": 119, "name": "Los Angeles Dodgers"}},
+            "home": {"team": {"id": 111, "name": "Boston Red Sox"}}
+          },
+          "doubleHeader": "N",
+          "gameNumber": 1,
+          "venue": {"id": 3, "name": "Fenway Park"}
+        }
+      ]
+    }
+  ]
+}

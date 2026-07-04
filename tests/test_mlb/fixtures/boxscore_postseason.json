@@ -1,0 +1,55 @@
+{
+  "teams": {
+    "away": {
+      "team": {"id": 119, "name": "Los Angeles Dodgers", "abbreviation": "LAD"},
+      "players": {
+        "ID605141": {
+          "person": {"id": 605141, "fullName": "Mookie Betts"},
+          "position": {"abbreviation": "RF"},
+          "battingOrder": "100",
+          "stats": {
+            "batting": {
+              "atBats": 5, "runs": 1, "hits": 3, "doubles": 1, "triples": 0,
+              "homeRuns": 0, "rbi": 1, "baseOnBalls": 0, "strikeOuts": 1,
+              "stolenBases": 0, "caughtStealing": 0, "hitByPitch": 0,
+              "totalBases": 4, "plateAppearances": 5
+            },
+            "pitching": {}
+          }
+        },
+        "ID621111": {
+          "person": {"id": 621111, "fullName": "Relief Arm"},
+          "position": {"abbreviation": "P"},
+          "stats": {
+            "batting": {},
+            "pitching": {
+              "gamesStarted": 0, "outs": 3, "hits": 0, "runs": 0,
+              "earnedRuns": 0, "baseOnBalls": 0, "strikeOuts": 2,
+              "homeRuns": 0, "battersFaced": 3, "numberOfPitches": 12,
+              "wins": 0, "losses": 0, "saves": 1, "holds": 0
+            }
+          }
+        }
+      }
+    },
+    "home": {
+      "team": {"id": 147, "name": "New York Yankees", "abbreviation": "NYY"},
+      "players": {
+        "ID543305": {
+          "person": {"id": 543305, "fullName": "Aaron Judge"},
+          "position": {"abbreviation": "CF"},
+          "battingOrder": "200",
+          "stats": {
+            "batting": {
+              "atBats": 4, "runs": 0, "hits": 1, "doubles": 0, "triples": 0,
+              "homeRuns": 0, "rbi": 0, "baseOnBalls": 0, "strikeOuts": 3,
+              "stolenBases": 0, "caughtStealing": 0, "hitByPitch": 0,
+              "totalBases": 1, "plateAppearances": 4
+            },
+            "pitching": {}
+          }
+        }
+      }
+    }
+  }
+}
