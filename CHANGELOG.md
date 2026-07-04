@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-04
+
+### Done
+- Added the **Chalk Dev Flow** — agentic, self-correcting Git workflows under `.claude/`, modeled on the Compound Engineering loop (brainstorm → plan → work → review → ship → compound) and adapted to Chalk.
+- Restructured to a Windsurf-style two-layer design: **one self-contained slash command per branch type** (the orchestrators) + **reusable phase skills** they invoke.
+  - 13 branch-type workflows: `.claude/commands/chalk-{feature,bugfix,hotfix,refactor,perf,experiment,chore,docs,test,style,ci,build,release}.md`.
+  - 6 phase skills: `.claude/skills/chalk-{brainstorm,plan,work,review,ship,compound}/SKILL.md`.
+  - 5 spec templates in `.claude/templates/` + an index `.claude/README.md`.
+- Each workflow is self-contained with `## MCP Integration` (uses whatever MCP servers are connected — trackers, Git hosting, CI, quality gates — no specific one assumed), `## Resuming` (skip completed phases on restart), and `## Steps` with **loop-back error recovery** (later phase fails → return to `chalk-work`/`chalk-plan`) and **loop caps** (stop after 3 no-progress rounds and ask the user).
+- Codified the branch-naming convention with the hard rule: all work branches off `railway`, PRs target `railway`, and `main` is touched only by the deliberate `railway → main` promotion inside `/chalk-release`.
+- Each run scaffolds `specs/<branch-slug>/` with the five specs: planning, design, implementation (API + DB + security), testing, deployment.
+- Added a CI enforcement of the golden branch rule: `.github/workflows/branch-guard.yml` fails PRs into `main` that don't come from `railway`/`release/*`, and PRs into `railway` whose branch lacks an approved `<prefix>/`.
+
+### Metrics
+- 13 workflow commands + 6 phase skills + 5 templates + 1 README = 25 markdown files, plus 1 CI workflow.
+- No application code touched; test suite unaffected.
+
+### Pending
+- Dogfood on a real branch; tune per-type step lists and loop caps from usage.
+- **Manual (admin):** make `branch-guard` a required status check on `main` and `railway` via branch protection (steps documented in `.claude/README.md`) — a workflow can't self-require.
+
+### Next
+- Run `/chalk-feature` on the next piece of work and refine the phase skills from what surfaces.
+
+---
+
 ## 2026-04-16 (Phase 9 AI Injury Agent)
 
 ### Done

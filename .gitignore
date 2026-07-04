@@ -6,6 +6,7 @@ build/
 .eggs/
 *.egg
 .env
+.claude/settings.local.json
 .cache/
 .venv/
 venv/

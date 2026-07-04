@@ -15,6 +15,29 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ---
 
+## Tooling — Chalk Dev Flow (2026-07-04)
+
+Agentic, self-correcting Git workflows under `.claude/`, Compound-Engineering-style.
+Not a product phase — a process scaffold you invoke per branch type.
+
+- **What & why:** run one slash command per branch type (e.g. `/chalk-feature`,
+  `/chalk-bugfix`) and it drives the whole loop — branch off `railway`, produce the five
+  specs, TDD the code, ship a PR into `railway` — looping back to an earlier phase when a
+  later one fails.
+- **Structure (Windsurf-style two layers):**
+  - `.claude/commands/chalk-*.md` (13) — self-contained branch-type orchestrators with
+    `## MCP Integration`, `## Resuming`, `## Steps` (loop-backs + loop caps).
+  - `.claude/skills/chalk-*/SKILL.md` (6) — phase building blocks: brainstorm, plan,
+    work, review, ship, compound.
+  - `.claude/templates/*.md` (5); `.claude/README.md`; `specs/` output dir.
+- **Rules baked in:** branch off `railway`, PR into `railway`, `main` only via the
+  `railway → main` promotion in `/chalk-release`; MCP-aware (uses connected servers);
+  Chalk non-negotiables (`as_of_date`, upsert, async, one-model-per-stat, walk-forward).
+- **Status:** complete and ready to dogfood. No application code changed.
+- **Deferred:** tune per-type steps/loop caps from real usage.
+
+---
+
 ## Session Kickoff Prompt
 
 Paste this at the start of every Claude Code session:
