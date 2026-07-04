@@ -27,3 +27,4 @@ tmp_pytest_run3/
 *.log
 *.db
 *.pdf
+.coverage
