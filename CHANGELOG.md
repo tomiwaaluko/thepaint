@@ -19,6 +19,7 @@
 
 ### Pending
 - Dogfood on a real branch; tune per-type step lists and loop caps from usage.
+- **Manual (admin):** make `branch-guard` a required status check on `main` and `railway` via branch protection (steps documented in `.claude/README.md`) — a workflow can't self-require.
 
 ### Next
 - Run `/chalk-feature` on the next piece of work and refine the phase skills from what surfaces.

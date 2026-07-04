@@ -21,6 +21,27 @@ when:
 - it targets `main` from anything other than `railway` or a `release/*` branch, or
 - it targets `railway` with a branch name that lacks an approved `<prefix>/`.
 
+### One-time setup: make the guard block merges
+
+The workflow only *reports* pass/fail — GitHub can't require it from a workflow file, so
+turn it into a **required status check** once (needs admin on the repo). Do this for
+both protected branches:
+
+1. **Settings → Branches → Add branch ruleset** (or *Add classic branch protection
+   rule*).
+2. Target branch: `main` (repeat for `railway`).
+3. Enable **Require status checks to pass before merging**, then search for and select
+   **`branch-guard`**. Also enable **Require a pull request before merging**.
+4. Save.
+
+Notes:
+- `branch-guard` appears in the check list only after the workflow has run at least once
+  (open any PR to trigger it).
+- Recommended extras on `main`: **Do not allow bypassing the above settings** and
+  restrict who can push, so the `railway → main` promotion always goes through a PR.
+- The guard is necessary but not sufficient — pair it with your normal test/CI checks as
+  additional required checks.
+
 ---
 
 ## Two layers (like Windsurf's `workflows/` + `skills/`)
