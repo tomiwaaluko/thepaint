@@ -52,6 +52,18 @@ def _game(game_pk: int = 745123, game_number: int = 1) -> MlbGame:
     )
 
 
+class TestMetadataRegistration:
+    def test_mlb_tables_register_on_shared_base(self):
+        """Alembic autogenerate sees MLB tables via the shared Base metadata."""
+        from chalk.db.models import Base
+
+        expected = {
+            "mlb_teams", "mlb_players", "mlb_games",
+            "mlb_batter_game_logs", "mlb_pitcher_game_logs",
+        }
+        assert expected <= set(Base.metadata.tables)
+
+
 class TestORMModels:
     async def test_create_team(self, session):
         session.add(_team())
