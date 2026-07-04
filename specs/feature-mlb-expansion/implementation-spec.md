@@ -14,76 +14,76 @@
 Bite-sized tasks. One commit per task (or per tight group). TDD: each task's test
 is written RED first where a public surface exists.
 
-- [ ] **T1** — `chalk/config.py` + `.env.example` — add `MLB_API_CACHE_DIR`
+- [x] **T1** — `chalk/config.py` + `.env.example` — add `MLB_API_CACHE_DIR`
       (default `.cache/mlb_api`), `MLB_API_TIMEOUT` (30), `MLB_API_MAX_RETRIES`
       (5) — verify: `pytest tests/ -q` still green (settings defaults only).
-- [ ] **T2** — `chalk/mlb/__init__.py` + `chalk/mlb/models.py` — 5 ORM tables on
+- [x] **T2** — `chalk/mlb/__init__.py` + `chalk/mlb/models.py` — 5 ORM tables on
       shared `Base`: `MlbTeam`, `MlbPlayer`, `MlbGame`, `MlbBatterGameLog`,
       `MlbPitcherGameLog` (columns per DB spec below) — verify:
       `pytest tests/test_mlb/test_models.py -v` (create rows in sqlite,
       uniqueness constraints enforced, doubleheader legs coexist, two-way player
       has a row in both log tables).
-- [ ] **T3** — `tests/test_mlb/fixtures/` — trimmed real-shape StatsAPI JSON:
+- [x] **T3** — `tests/test_mlb/fixtures/` — trimmed real-shape StatsAPI JSON:
       `teams.json`, `schedule_single.json`, `schedule_doubleheader.json`
       (includes one spring-training game to prove filtering),
       `boxscore_regular.json` (includes a two-way player),
       `boxscore_postseason.json` — verify: fixtures load as JSON.
-- [ ] **T4** — `chalk/mlb/fetcher.py` — `_fetch_json(path, params)` with disk
+- [x] **T4** — `chalk/mlb/fetcher.py` — `_fetch_json(path, params)` with disk
       cache (md5 key like `nba_fetcher._cache_path`, path-traversal-safe),
       exponential backoff + jitter, max `MLB_API_MAX_RETRIES` → `IngestError` —
       verify: `pytest tests/test_mlb/test_fetcher.py -v -k cache_or_backoff`
       (cache hit skips HTTP; retries then raises `IngestError`; mocked
       transport, no real network).
-- [ ] **T5** — `chalk/mlb/fetcher.py` — `ingest_mlb_teams(session, season)`
+- [x] **T5** — `chalk/mlb/fetcher.py` — `ingest_mlb_teams(session, season)`
       parse + upsert (`ON CONFLICT (team_id) DO UPDATE`) — verify: idempotency
       test (run twice → same row count and values).
-- [ ] **T6** — `chalk/mlb/fetcher.py` — `ingest_mlb_schedule(session, start,
+- [x] **T6** — `chalk/mlb/fetcher.py` — `ingest_mlb_schedule(session, start,
       end)`: filter `gameType` to `R/F/D/L/W`, derive `is_postseason`, upsert
       `mlb_games` on `game_pk` — verify: doubleheader fixture yields 2 distinct
       games same date/teams; spring game excluded; postseason flag set; run
       twice → identical state.
-- [ ] **T7** — `chalk/mlb/fetcher.py` — boxscore parsers:
+- [x] **T7** — `chalk/mlb/fetcher.py` — boxscore parsers:
       `_build_batter_rows(payload, ...)` / `_build_pitcher_rows(payload, ...)`
       including `outs_recorded` from upstream `outs`; missing counting stats
       default 0 — verify: parser unit tests incl. two-way player producing one
       batter row + one pitcher row.
-- [ ] **T8** — `chalk/mlb/fetcher.py` — `ingest_mlb_boxscore(session, game_pk)`:
+- [x] **T8** — `chalk/mlb/fetcher.py` — `ingest_mlb_boxscore(session, game_pk)`:
       opportunistic team/player upserts, then batter/pitcher log upserts on
       `(game_pk, player_id)`; returns `(batter_rows, pitcher_rows)` — verify:
       idempotency (twice → same state); FK integrity (players/teams exist
       before logs).
-- [ ] **T9** — `chalk/mlb/fetcher.py` — `ingest_mlb_date(session, game_date)`:
+- [x] **T9** — `chalk/mlb/fetcher.py` — `ingest_mlb_date(session, game_date)`:
       schedule for the date → boxscores for games with `status == "Final"`;
       returns summary dict; empty date (no games) returns zeros without error —
       verify: composed test on fixtures; no-games day logs `no_mlb_games` and
       succeeds.
-- [ ] **T10** — `chalk/mlb/validate.py` — `validate_mlb_row_counts(session,
+- [x] **T10** — `chalk/mlb/validate.py` — `validate_mlb_row_counts(session,
       game_date)`: games exist for date but zero batter+pitcher logs → log
       `validation_failed_no_mlb_logs` warning, return `False`; healthy or
       no-games → `True`; never raises — verify: three-case test.
-- [ ] **T11** — `alembic/env.py` — add `import chalk.mlb.models  # noqa: F401`
+- [x] **T11** — `alembic/env.py` — add `import chalk.mlb.models  # noqa: F401`
       after the `Base` import — verify: `alembic revision --autogenerate` sees
       the 5 tables (or offline check: `Base.metadata.tables` contains
       `mlb_teams` etc. via test).
-- [ ] **T12** — `alembic/versions/<rev>_add_mlb_tables.py` — hand-written
+- [x] **T12** — `alembic/versions/<rev>_add_mlb_tables.py` — hand-written
       additive migration: `upgrade()` creates 5 tables + indexes,
       `downgrade()` drops them in FK-safe order; **touches no existing table**
       — verify: `alembic upgrade head` + `alembic downgrade -1` round-trip on a
       scratch sqlite/postgres URL.
-- [ ] **T13** — `scripts/mlb_backfill.py` — seasons 2018→current: per-season
+- [x] **T13** — `scripts/mlb_backfill.py` — seasons 2018→current: per-season
       schedule ingest, then boxscore ingest per game; progress file
       `.cache/mlb_backfill_progress.json` (completed `game_pk`s), resume skips
       completed; `INTER_REQUEST_DELAY` politeness sleep; `IngestError` on one
       game skips + logs, doesn't abort — verify:
       `pytest tests/test_mlb/test_backfill.py -v` (resume logic, skip-on-error)
       with mocked ingest functions.
-- [ ] **T14** — `scripts/mlb_ingest_daily.py` — steps: `ingest_mlb_date(yesterday)`
+- [x] **T14** — `scripts/mlb_ingest_daily.py` — steps: `ingest_mlb_date(yesterday)`
       → `ingest_mlb_schedule(today, today)` → `validate_mlb_row_counts(yesterday)`;
       per-step sessions, `run_step` isolation, structlog step logs; exit 0
       healthy / 1 if any step failed or validation returned False — verify:
       `pytest tests/test_mlb/test_ingest_daily.py -v` (exit-code matrix with
       mocked steps).
-- [ ] **T15** — Full-suite gate + docs — `pytest tests/ -q` all green (255
+- [x] **T15** — Full-suite gate + docs — `pytest tests/ -q` all green (255
       baseline + new); update `TODO.md`; `CHANGELOG.md` entry per session rules
       — verify: suite output pasted into `testing-spec.md`.
 
