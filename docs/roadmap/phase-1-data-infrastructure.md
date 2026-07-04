@@ -13,7 +13,7 @@ Phase 2 (Feature Engineering) — needs populated player_game_logs and team_game
 
 ## Skill Files to Read First
 - `CLAUDE.md` — DB schema, naming conventions, environment variables
-- `.claude/skills/data-ingestion/SKILL.md` — nba_api patterns, backoff, upserts
+- `.agents/skills/data-ingestion/SKILL.md` — nba_api patterns, backoff, upserts
 
 ---
 
@@ -367,7 +367,7 @@ alembic upgrade head
 
 ### `chalk/ingestion/nba_fetcher.py`
 
-Build following the pattern in `.claude/skills/data-ingestion/SKILL.md`.
+Build following the pattern in `.agents/skills/data-ingestion/SKILL.md`.
 
 **Key functions to implement:**
 

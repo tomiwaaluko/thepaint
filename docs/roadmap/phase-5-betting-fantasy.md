@@ -11,7 +11,7 @@ Phase 4 complete — prediction API working with quantile distributions.
 Phase 6 (Dashboard) — betting and fantasy routes feed the UI.
 
 ## Skill Files to Read First
-- `.claude/skills/api-patterns/SKILL.md` — OverUnderResponse schema, props route pattern
+- `.agents/skills/api-patterns/SKILL.md` — OverUnderResponse schema, props route pattern
 
 ---
 

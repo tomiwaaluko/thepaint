@@ -31,20 +31,20 @@ in TODO.md and run any relevant tests before stopping.
 
 | Phase | Name | Status | Phase File |
 |---|---|---|---|
-| 1 | Data Infrastructure | ✅ Complete | `.claude/phases/phase-1-data-infrastructure.md` |
-| 2 | Feature Engineering | ✅ Complete | `.claude/phases/phase-2-feature-engineering.md` |
-| 3 | Baseline ML Models | ✅ Complete (4/5 targets met) | `.claude/phases/phase-3-baseline-models.md` |
-| 4 | Prediction API | ✅ Complete | `.claude/phases/phase-4-prediction-api.md` |
-| 5 | Betting & Fantasy | ✅ Complete | `.claude/phases/phase-5-betting-fantasy.md` |
-| 6 | Dashboard UI | ✅ Complete | `.claude/phases/phase-6-dashboard.md` |
-| 7 | Automation & Monitoring | ✅ Complete | `.claude/phases/phase-7-automation.md` |
-| 8 | Ensemble & Tuning | ⏳ Not Started | `.claude/phases/phase-8-ensemble-tuning.md` |
-| 9 | AI Injury Agent | In Progress | `.claude/phases/phase-9-ai-injury-agent.md` |
+| 1 | Data Infrastructure | ✅ Complete | `docs/roadmap/phase-1-data-infrastructure.md` |
+| 2 | Feature Engineering | ✅ Complete | `docs/roadmap/phase-2-feature-engineering.md` |
+| 3 | Baseline ML Models | ✅ Complete (4/5 targets met) | `docs/roadmap/phase-3-baseline-models.md` |
+| 4 | Prediction API | ✅ Complete | `docs/roadmap/phase-4-prediction-api.md` |
+| 5 | Betting & Fantasy | ✅ Complete | `docs/roadmap/phase-5-betting-fantasy.md` |
+| 6 | Dashboard UI | ✅ Complete | `docs/roadmap/phase-6-dashboard.md` |
+| 7 | Automation & Monitoring | ✅ Complete | `docs/roadmap/phase-7-automation.md` |
+| 8 | Ensemble & Tuning | ⏳ Not Started | `docs/roadmap/phase-8-ensemble-tuning.md` |
+| 9 | AI Injury Agent | In Progress | `docs/roadmap/phase-9-ai-injury-agent.md` |
 
 ---
 
 ## Phase 1 — Data Infrastructure
-**Phase File:** `.claude/phases/phase-1-data-infrastructure.md`
+**Phase File:** `docs/roadmap/phase-1-data-infrastructure.md`
 **Goal:** PostgreSQL DB running, nba_api ingestion working, 2015–2025 data backfilled.
 
 - [x] Repo scaffold — pyproject.toml, Dockerfile, docker-compose.yml, .env.example
@@ -67,7 +67,7 @@ in TODO.md and run any relevant tests before stopping.
 ---
 
 ## Phase 2 — Feature Engineering
-**Phase File:** `.claude/phases/phase-2-feature-engineering.md`
+**Phase File:** `docs/roadmap/phase-2-feature-engineering.md`
 **Goal:** generate_features(player_id, game_id, as_of_date) returns a validated 80+ feature dict.
 
 - [x] Rolling window averages — chalk/features/rolling.py (15 tests passing)
@@ -84,7 +84,7 @@ in TODO.md and run any relevant tests before stopping.
 ---
 
 ## Phase 3 — Baseline ML Models
-**Phase File:** `.claude/phases/phase-3-baseline-models.md`
+**Phase File:** `docs/roadmap/phase-3-baseline-models.md`
 **Goal:** Trained XGBoost models for pts, reb, ast, fg3m hitting MAE targets on 2023-24 holdout.
 
 - [x] Base trainer class — chalk/models/base.py
@@ -107,7 +107,7 @@ in TODO.md and run any relevant tests before stopping.
 ---
 
 ## Phase 4 — Prediction API
-**Phase File:** `.claude/phases/phase-4-prediction-api.md`
+**Phase File:** `docs/roadmap/phase-4-prediction-api.md`
 **Goal:** FastAPI service returning full predicted statlines with confidence intervals in < 500ms.
 
 - [x] Pydantic response schemas — chalk/api/schemas.py (14 tests)
@@ -130,7 +130,7 @@ in TODO.md and run any relevant tests before stopping.
 ---
 
 ## Phase 5 — Betting & Fantasy
-**Phase File:** `.claude/phases/phase-5-betting-fantasy.md`
+**Phase File:** `docs/roadmap/phase-5-betting-fantasy.md`
 **Goal:** O/U probabilities vs. Vegas lines, DK/FD/Yahoo fantasy scores, edge calculation.
 
 - [x] Over/under probability module — chalk/betting/over_under.py (21 tests)
@@ -147,7 +147,7 @@ in TODO.md and run any relevant tests before stopping.
 ---
 
 ## Phase 6 — Dashboard UI
-**Phase File:** `.claude/phases/phase-6-dashboard.md`
+**Phase File:** `docs/roadmap/phase-6-dashboard.md`
 **Goal:** React dashboard showing today's slate, predictions, O/U comparison, fantasy value plays.
 
 - [x] React app scaffold — dashboard/ (Vite + React 18 + TypeScript + Tailwind v4)
@@ -169,7 +169,7 @@ in TODO.md and run any relevant tests before stopping.
 ---
 
 ## Phase 7 — Automation & Monitoring
-**Phase File:** `.claude/phases/phase-7-automation.md`
+**Phase File:** `docs/roadmap/phase-7-automation.md`
 **Goal:** Daily Airflow pipelines running unattended, model drift alerts in place.
 
 - [x] Airflow Docker setup — docker-compose.yml (init + webserver + scheduler, LocalExecutor)
@@ -186,7 +186,7 @@ in TODO.md and run any relevant tests before stopping.
 ---
 
 ## Phase 8 — Ensemble & Tuning
-**Phase File:** `.claude/phases/phase-8-ensemble-tuning.md`
+**Phase File:** `docs/roadmap/phase-8-ensemble-tuning.md`
 **Goal:** Stacked ensemble, Optuna hyperparameter search, edge tracking over time.
 
 - [x] Optuna hyperparameter search for each stat model — `chalk/models/tuning.py`

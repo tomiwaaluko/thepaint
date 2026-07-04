@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Over/under probability distributions for sports betting
 - Fantasy scoring projections (DraftKings, FanDuel, Yahoo)
 
-The full architecture and roadmap is documented in `NBA_Prediction_System_Roadmap.pdf`.
+The architecture overview lives in `docs/OVERVIEW.md`, and phase planning docs live in `docs/roadmap/`.
 
 ## Tech Stack
 
@@ -36,8 +36,8 @@ The full architecture and roadmap is documented in `NBA_Prediction_System_Roadma
 ```
 tha_paint/
 ├── CLAUDE.md                        ← you are here
-├── .claude/
-│   └── skills/                      ← Claude Code skill files
+├── .agents/
+│   └── skills/                      ← repo agent skill files
 │       ├── feature-engineering/
 │       ├── mlflow-tracking/
 │       ├── api-patterns/
@@ -272,19 +272,19 @@ Key production rules:
 - Redis URL is auto-injected from the Redis service — reference it via `${{Redis.REDIS_URL}}`
 - MLflow is NOT deployed in production — model files are committed to git and loaded from disk
 
-See `.claude/skills/railway-deployment/SKILL.md` for full setup details.
+See `.agents/skills/railway-deployment/SKILL.md` for full setup details.
 
 ## Skills Available
 
 Read these before working on the relevant module:
 
-- `.claude/skills/data-ingestion/SKILL.md` — nba_api patterns, backoff, caching, upserts
-- `.claude/skills/feature-engineering/SKILL.md` — rolling windows, as_of_date gate, opponent features
-- `.claude/skills/model-training/SKILL.md` — XGBoost setup, walk-forward CV, MLflow logging
-- `.claude/skills/mlflow-tracking/SKILL.md` — experiment naming, artifact logging, model registry
-- `.claude/skills/api-patterns/SKILL.md` — FastAPI route patterns, response schemas, caching
-- `.claude/skills/railway-deployment/SKILL.md` — Railway cron jobs, Supabase connection, private networking
-- `.claude/skills/ensemble-tuning/SKILL.md` — Phase 8: Optuna, LightGBM, stacking, CLV tracking
+- `.agents/skills/data-ingestion/SKILL.md` — nba_api patterns, backoff, caching, upserts
+- `.agents/skills/feature-engineering/SKILL.md` — rolling windows, as_of_date gate, opponent features
+- `.agents/skills/model-training/SKILL.md` — XGBoost setup, walk-forward CV, MLflow logging
+- `.agents/skills/mlflow-tracking/SKILL.md` — experiment naming, artifact logging, model registry
+- `.agents/skills/api-patterns/SKILL.md` — FastAPI route patterns, response schemas, caching
+- `.agents/skills/railway-deployment/SKILL.md` — Railway cron jobs, Supabase connection, private networking
+- `.agents/skills/ensemble-tuning/SKILL.md` — Phase 8: Optuna, LightGBM, stacking, CLV tracking
 
 ## Development Phases
 

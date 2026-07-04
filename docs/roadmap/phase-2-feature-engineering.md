@@ -12,7 +12,7 @@ Phase 1 complete — `player_game_logs` and `team_game_logs` tables populated.
 Phase 3 (Baseline Models) — needs `generate_features()` to build training matrices.
 
 ## Skill Files to Read First
-- `.claude/skills/feature-engineering/SKILL.md` — all patterns, function signatures, as_of_date rules
+- `.agents/skills/feature-engineering/SKILL.md` — all patterns, function signatures, as_of_date rules
 - `CLAUDE.md` — naming conventions, the leakage rule
 
 ---

@@ -12,7 +12,7 @@ Phase 4 + Phase 5 complete — all API endpoints working.
 Phase 7 (Automation) — dashboard is the consumer that validates the full pipeline end-to-end.
 
 ## Skill Files to Read First
-- `.claude/skills/api-patterns/SKILL.md` — API response schemas (know what data is available)
+- `.agents/skills/api-patterns/SKILL.md` — API response schemas (know what data is available)
 
 ---
 
