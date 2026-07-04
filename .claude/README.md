@@ -21,6 +21,10 @@ when:
 - it targets `main` from anything other than `railway` or a `release/*` branch, or
 - it targets `railway` with a branch name that lacks an approved `<prefix>/`.
 
+Automation branches created by tooling that can't rename them (Claude Code's `claude/*`,
+plus `dependabot/*` and `renovate/*`) are also accepted **into `railway`** — but, like
+every other branch, they still may not merge directly into `main`.
+
 ### One-time setup: make the guard block merges
 
 The workflow only *reports* pass/fail — GitHub can't require it from a workflow file, so
