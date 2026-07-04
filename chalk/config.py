@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     NBA_API_MAX_RETRIES: int = 3
     # When true, missing player logs for a day with games make the ingest cron exit non-zero.
     INGEST_STRICT_VALIDATION: bool = False
+    # MLB StatsAPI (statsapi.mlb.com) — keyless public API.
+    MLB_API_CACHE_DIR: Path = Path(".cache/mlb_api")
+    MLB_API_TIMEOUT: int = 30
+    MLB_API_MAX_RETRIES: int = 5
 
     model_config = {"env_file": ".env"}
 
