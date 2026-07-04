@@ -26,8 +26,11 @@ jobs:
           set -euo pipefail
           echo "Pull request: '$HEAD' -> '$BASE'"
 
-          # Approved prefixes — keep in sync with .claude/README.md's table.
+          # Approved human prefixes — keep in sync with .claude/README.md's table.
           ALLOWED='feature bugfix hotfix chore docs refactor test style perf ci build release experiment'
+          # Automation prefixes — agent/bot branches (e.g. Claude Code) that tooling
+          # creates and cannot rename. Allowed into railway alongside the human set.
+          AUTOMATION='claude dependabot renovate'
 
           fail() {
             echo "::error::$1"
@@ -60,10 +63,13 @@ jobs:
               for p in $ALLOWED; do
                 if [ "$PREFIX" = "$p" ]; then MATCH=true; break; fi
               done
+              for p in $AUTOMATION; do
+                if [ "$PREFIX" = "$p" ]; then MATCH=true; break; fi
+              done
               if [ "$MATCH" = "true" ]; then
-                echo "OK: '$HEAD' targets 'railway' with approved prefix '$PREFIX/'."
+                echo "OK: '$HEAD' targets 'railway' with allowed prefix '$PREFIX/'."
               else
-                fail "Branch prefix '$PREFIX/' is not approved. Use one of: $ALLOWED."
+                fail "Branch prefix '$PREFIX/' is not approved. Use one of: $ALLOWED (or an automation prefix: $AUTOMATION)."
               fi
               ;;
             *)
