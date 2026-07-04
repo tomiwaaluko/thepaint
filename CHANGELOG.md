@@ -11,9 +11,10 @@
 - Each workflow is self-contained with `## MCP Integration` (uses whatever MCP servers are connected — trackers, Git hosting, CI, quality gates — no specific one assumed), `## Resuming` (skip completed phases on restart), and `## Steps` with **loop-back error recovery** (later phase fails → return to `chalk-work`/`chalk-plan`) and **loop caps** (stop after 3 no-progress rounds and ask the user).
 - Codified the branch-naming convention with the hard rule: all work branches off `railway`, PRs target `railway`, and `main` is touched only by the deliberate `railway → main` promotion inside `/chalk-release`.
 - Each run scaffolds `specs/<branch-slug>/` with the five specs: planning, design, implementation (API + DB + security), testing, deployment.
+- Added a CI enforcement of the golden branch rule: `.github/workflows/branch-guard.yml` fails PRs into `main` that don't come from `railway`/`release/*`, and PRs into `railway` whose branch lacks an approved `<prefix>/`.
 
 ### Metrics
-- 13 workflow commands + 6 phase skills + 5 templates + 1 README = 25 markdown files.
+- 13 workflow commands + 6 phase skills + 5 templates + 1 README = 25 markdown files, plus 1 CI workflow.
 - No application code touched; test suite unaffected.
 
 ### Pending

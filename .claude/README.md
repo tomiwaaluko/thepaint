@@ -16,6 +16,11 @@ and it drives the whole loop end to end: it cuts a correctly-named branch off
 > **All work branches off `railway`. `main` is never touched directly** — except by the
 > one deliberate `railway → main` promotion inside `/chalk-release`.
 
+This rule is enforced in CI by `.github/workflows/branch-guard.yml`, which fails a PR
+when:
+- it targets `main` from anything other than `railway` or a `release/*` branch, or
+- it targets `railway` with a branch name that lacks an approved `<prefix>/`.
+
 ---
 
 ## Two layers (like Windsurf's `workflows/` + `skills/`)
