@@ -31,11 +31,14 @@ sport: additive `chalk/mlb/` package — **zero NBA behavior changed**.
   `scripts/mlb_ingest_daily.py`, `tests/test_mlb/` (5 fixture files, 58 tests
   incl. scaffold), settings in `chalk/config.py` + `.env.example`, five specs
   in `specs/feature-mlb-expansion/`.
-- **Status:** code + tests complete (301 passed full suite; one pre-existing
-  timezone flake in `test_today_games_no_stale_fallback` unrelated to diff);
-  independent 8-angle review done, blocking findings fixed (abstract_state
-  finality, per-game failure isolation, uncached live windows, malformed-entry
-  guards). PR pending merge; backfill is operator-run post-merge.
+- **Status:** ✅ **merged (PR #28 → `railway`) and deployed.** Migration
+  `f6a7b8c9d0e1` applied to production Supabase (`ulzrnfpwmhkzmfiqvtns`); 5
+  `mlb_*` tables live with RLS enabled, `alembic_version` at `f6a7b8c9d0e1`, NBA
+  data untouched. 301 passed full suite; one pre-existing timezone flake in
+  `test_today_games_no_stale_fallback` unrelated to diff. Independent 8-angle +
+  CodeRabbit review done, all findings fixed. **Remaining operator step: run
+  `python scripts/mlb_backfill.py`** from an env that can reach statsapi.mlb.com
+  (the agent sandbox proxy blocks it; the DB is ready and empty).
 - **Deferred / discovered:** pitcher decision-flag verification on first live
   ingest; `bats/throws/birth_date` enrichment; shared-helper extraction into
   `core/` (with the refactor branch); NBA games-API timezone flake fix.

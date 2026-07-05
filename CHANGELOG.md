@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-05 (later) — MLB slice 1 merged & deployed
+### Done
+- Merged PR #28 (`feature/mlb-expansion` → `railway`, merge `c94b73b`).
+- Applied migration `f6a7b8c9d0e1` to **production Supabase**: 5 `mlb_*` tables + 4 indexes created, RLS enabled to match the NBA tables, `alembic_version` advanced to `f6a7b8c9d0e1`. Verified NBA tables intact (154k player logs).
+- Captured loop learnings in `docs/solutions/2026-07-05-feature-mlb-expansion.md`.
+### Pending
+- Operator backfill (`python scripts/mlb_backfill.py`) from an env that can reach statsapi.mlb.com — the tables are live but empty.
+### Next
+- Promote durable learnings (CLAUDE.md MLB-ingestion subsection, chalk-review checklist additions) as small follow-ups; then the MLB feature-engineering slice.
+
 ## 2026-07-05
 
 ### Done
