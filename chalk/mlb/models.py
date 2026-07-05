@@ -30,10 +30,13 @@ class MlbTeam(Base):
     team_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     abbreviation: Mapped[str] = mapped_column(String(5), nullable=False)
-    league: Mapped[str] = mapped_column(String(20), nullable=False)
-    division: Mapped[str] = mapped_column(String(30), nullable=False)
+    # Nullable: stub rows upserted for FK safety carry only id+name until a
+    # full ingest_mlb_teams run fills the metadata — NULL is an honest
+    # "not yet known", unlike an empty-string sentinel.
+    league: Mapped[str | None] = mapped_column(String(20))
+    division: Mapped[str | None] = mapped_column(String(30))
     venue: Mapped[str | None] = mapped_column(String(100))
-    city: Mapped[str] = mapped_column(String(50), nullable=False)
+    city: Mapped[str | None] = mapped_column(String(50))
 
     players: Mapped[list["MlbPlayer"]] = relationship(back_populates="team")
 
@@ -74,7 +77,10 @@ class MlbGame(Base):
     game_number: Mapped[int] = mapped_column(Integer, default=1)
     home_team_id: Mapped[int] = mapped_column(ForeignKey("mlb_teams.team_id"), nullable=False)
     away_team_id: Mapped[int] = mapped_column(ForeignKey("mlb_teams.team_id"), nullable=False)
-    status: Mapped[str] = mapped_column(String(30), default="scheduled")
+    status: Mapped[str] = mapped_column(String(50), default="scheduled")
+    # Upstream's coarse state machine: Preview / Live / Final. The canonical
+    # "is this game over" signal; status (detailedState) is display detail.
+    abstract_state: Mapped[str | None] = mapped_column(String(20))
     venue: Mapped[str | None] = mapped_column(String(100))
 
     home_team: Mapped["MlbTeam"] = relationship(foreign_keys=[home_team_id])

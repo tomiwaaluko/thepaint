@@ -63,6 +63,25 @@ class TestMetadataRegistration:
         }
         assert expected <= set(Base.metadata.tables)
 
+    def test_metadata_is_exhaustive(self):
+        """Guard against stray tables sneaking onto the shared Base.
+
+        tests/test_scaffold.py asserts the NBA subset; this test owns the full
+        union so schema drift (a typo'd __tablename__, an experimental table)
+        still fails somewhere.
+        """
+        from chalk.db.models import Base
+
+        nba = {
+            "teams", "players", "games", "player_game_logs",
+            "team_game_logs", "injuries", "betting_lines", "predictions",
+        }
+        mlb = {
+            "mlb_teams", "mlb_players", "mlb_games",
+            "mlb_batter_game_logs", "mlb_pitcher_game_logs",
+        }
+        assert nba | mlb == set(Base.metadata.tables)
+
 
 class TestORMModels:
     async def test_create_team(self, session):

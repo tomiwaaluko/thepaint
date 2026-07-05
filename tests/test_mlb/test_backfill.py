@@ -19,7 +19,7 @@ class TestSeasonWindows:
     def test_covers_february_through_november(self):
         windows = season_windows(2024)
         assert windows[0][0] == date(2024, 2, 15)
-        assert windows[-1][1] == date(2024, 11, 15)
+        assert windows[-1][1] == date(2024, 11, 30)
 
     def test_windows_are_contiguous_and_non_overlapping(self):
         windows = season_windows(2024)

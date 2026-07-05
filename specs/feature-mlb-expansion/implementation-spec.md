@@ -106,10 +106,10 @@ response schemas, no Redis caching. (Future slices add `/v1/mlb/...` routes.)
 | team_id | Integer PK | no | upstream StatsAPI team id |
 | name | String(100) | no | |
 | abbreviation | String(5) | no | |
-| league | String(20) | no | AL / NL |
-| division | String(30) | no | e.g. "AL East" |
+| league | String(20) | yes | AL / NL; NULL on FK-safety stub rows until full team ingest |
+| division | String(30) | yes | e.g. "AL East" |
 | venue | String(100) | yes | |
-| city | String(50) | no | locationName |
+| city | String(50) | yes | locationName |
 
 **`mlb_players`**
 | column | type | nullable | notes |
@@ -136,7 +136,8 @@ game_number)` (doubleheader-safe)
 | game_number | Integer default 1 | no | 1 or 2 |
 | home_team_id | FK mlb_teams | no | |
 | away_team_id | FK mlb_teams | no | |
-| status | String(30) default "scheduled" | no | |
+| status | String(50) default "scheduled" | no | upstream detailedState (display) |
+| abstract_state | String(20) | yes | upstream abstractGameState (Preview/Live/Final) — canonical finality signal |
 | venue | String(100) | yes | |
 
 **`mlb_batter_game_logs`** — `UniqueConstraint(game_pk, player_id)`;

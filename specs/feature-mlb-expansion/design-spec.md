@@ -113,10 +113,14 @@ async def ingest_mlb_teams(session: AsyncSession, season: int) -> int: ...
 async def ingest_mlb_schedule(
     session: AsyncSession, start_date: date, end_date: date
 ) -> int: ...
-async def ingest_mlb_boxscore(session: AsyncSession, game_pk: int) -> tuple[int, int]:
-    """Returns (batter_rows, pitcher_rows) upserted."""
+async def ingest_mlb_boxscore(
+    session: AsyncSession, game_pk: int, use_cache: bool = True
+) -> tuple[int, int]:
+    """Returns (batter_rows, pitcher_rows). Daily path passes use_cache=False
+    so late official-scorer stat corrections reconcile on re-ingest."""
 async def ingest_mlb_date(session: AsyncSession, game_date: date) -> dict[str, int]:
-    """Schedule + boxscores for one date. Returns row-count summary."""
+    """Schedule + boxscores for one date. Returns row-count summary incl.
+    failed_games; one bad boxscore is logged + counted, never aborts the day."""
 
 # chalk/mlb/validate.py
 async def validate_mlb_row_counts(session: AsyncSession, game_date: date) -> bool:

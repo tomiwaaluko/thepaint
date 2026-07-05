@@ -5,7 +5,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chalk.mlb.fetcher import is_final_status
+from chalk.mlb.fetcher import game_is_final
 from chalk.mlb.models import MlbBatterGameLog, MlbGame, MlbPitcherGameLog
 
 log = structlog.get_logger()
@@ -21,7 +21,7 @@ async def validate_mlb_row_counts(session: AsyncSession, game_date: date) -> boo
     games = (
         await session.execute(select(MlbGame).where(MlbGame.date == game_date))
     ).scalars().all()
-    final_games = [g for g in games if is_final_status(g.status)]
+    final_games = [g for g in games if game_is_final(g)]
     if not final_games:
         log.info("no_mlb_games_to_validate", date=str(game_date))
         return True

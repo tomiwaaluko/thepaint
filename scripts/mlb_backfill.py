@@ -18,7 +18,7 @@ from sqlalchemy import select
 from chalk.db.session import async_session_factory
 from chalk.exceptions import IngestError
 from chalk.mlb.fetcher import (
-    is_final_status,
+    game_is_final,
     ingest_mlb_boxscore,
     ingest_mlb_schedule,
     ingest_mlb_teams,
@@ -30,11 +30,13 @@ log = structlog.get_logger()
 DEFAULT_START_SEASON = 2018
 INTER_REQUEST_DELAY = 1.0  # seconds between StatsAPI boxscore calls
 PROGRESS_FILE = Path(".cache/mlb_backfill_progress.json")
+PROGRESS_FLUSH_EVERY = 25  # games between progress-file rewrites
 
 # The MLB calendar (spring reporting through the World Series) fits inside
-# Feb 15 – Nov 15; schedule ingestion filters to regular season + postseason.
+# Feb 15 – Nov 30 (cushion for postseason slippage); schedule ingestion
+# filters to regular season + postseason game types.
 SEASON_START = (2, 15)
-SEASON_END = (11, 15)
+SEASON_END = (11, 30)
 
 
 def season_windows(season: int, window_days: int = 30) -> list[tuple[date, date]]:
@@ -67,14 +69,17 @@ def save_progress(completed: set[int]) -> None:
 async def backfill_season(session, season: int, completed: set[int]) -> tuple[int, int]:
     """Backfill one season. Returns (games_ingested, games_skipped_on_error)."""
     await ingest_mlb_teams(session, season)
+    today = datetime.now(timezone.utc).date()
     for start, end in season_windows(season):
-        await ingest_mlb_schedule(session, start, end)
+        # Windows that touch today/the future have volatile statuses — caching
+        # them would permanently hide games from every future resume.
+        await ingest_mlb_schedule(session, start, end, use_cache=end < today)
         await asyncio.sleep(INTER_REQUEST_DELAY)
 
     result = await session.execute(
         select(MlbGame).where(MlbGame.season == str(season)).order_by(MlbGame.date)
     )
-    games = [g for g in result.scalars().all() if is_final_status(g.status)]
+    games = [g for g in result.scalars().all() if game_is_final(g)]
 
     done = 0
     skipped = 0
@@ -94,9 +99,11 @@ async def backfill_season(session, season: int, completed: set[int]) -> tuple[in
         except IngestError as e:
             skipped += 1
             log.error("mlb_backfill_skip", game_pk=game.game_pk, error=str(e))
-        save_progress(completed)
+        if (done + skipped) % PROGRESS_FLUSH_EVERY == 0:
+            save_progress(completed)
         await asyncio.sleep(INTER_REQUEST_DELAY)
 
+    save_progress(completed)
     return done, skipped
 
 

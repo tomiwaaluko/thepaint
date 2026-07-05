@@ -41,10 +41,10 @@ REQUEST_TIMEOUT = settings.MLB_API_TIMEOUT
 MAX_RETRIES = settings.MLB_API_MAX_RETRIES
 BASE_DELAY = 2.0
 
-# R = regular season; F/D/L/W = postseason rounds. Spring training (S),
+# F/D/L/W = postseason rounds; R = regular season. Spring training (S),
 # exhibition (E), and All-Star (A) games are never ingested.
-INGESTED_GAME_TYPES = {"R", "F", "D", "L", "W"}
 POSTSEASON_GAME_TYPES = {"F", "D", "L", "W"}
+INGESTED_GAME_TYPES = POSTSEASON_GAME_TYPES | {"R"}
 
 # detailedState prefixes that mean the game is over and has a final boxscore.
 _FINAL_STATUS_PREFIXES = ("Final", "Game Over", "Completed")
@@ -151,9 +151,6 @@ async def _upsert_stub_teams(session: AsyncSession, teams: list[dict]) -> None:
             "team_id": t["id"],
             "name": t.get("name", ""),
             "abbreviation": t.get("abbreviation", ""),
-            "league": "",
-            "division": "",
-            "city": "",
         }
         for t in teams
     ]
@@ -188,12 +185,10 @@ async def ingest_mlb_schedule(
         for g in day.get("games", []):
             if g.get("gameType") not in INGESTED_GAME_TYPES:
                 continue
-            home = g["teams"]["home"]["team"]
-            away = g["teams"]["away"]["team"]
-            stub_teams[home["id"]] = home
-            stub_teams[away["id"]] = away
-            games.append(
-                {
+            try:
+                home = g["teams"]["home"]["team"]
+                away = g["teams"]["away"]["team"]
+                row = {
                     "game_pk": g["gamePk"],
                     "date": date.fromisoformat(g["officialDate"]),
                     "season": str(g.get("season") or g["officialDate"][:4]),
@@ -204,9 +199,19 @@ async def ingest_mlb_schedule(
                     "home_team_id": home["id"],
                     "away_team_id": away["id"],
                     "status": (g.get("status") or {}).get("detailedState", "scheduled"),
+                    "abstract_state": (g.get("status") or {}).get("abstractGameState"),
                     "venue": (g.get("venue") or {}).get("name"),
                 }
-            )
+            except (KeyError, ValueError) as exc:
+                # One malformed schedule entry must not sink the whole window.
+                log.warning(
+                    "mlb_schedule_game_malformed",
+                    game_pk=g.get("gamePk"), error=str(exc),
+                )
+                continue
+            stub_teams[home["id"]] = home
+            stub_teams[away["id"]] = away
+            games.append(row)
 
     if not games:
         log.info("no_mlb_games", start=str(start_date), end=str(end_date))
@@ -226,6 +231,7 @@ async def ingest_mlb_schedule(
             "home_team_id": stmt.excluded.home_team_id,
             "away_team_id": stmt.excluded.away_team_id,
             "status": stmt.excluded.status,
+            "abstract_state": stmt.excluded.abstract_state,
             "venue": stmt.excluded.venue,
         },
     )
@@ -239,11 +245,18 @@ async def ingest_mlb_schedule(
 
 
 def _iter_boxscore_players(payload: dict):
-    """Yield (team_id, player_entry) for both sides of a boxscore."""
+    """Yield (team_id, player_entry) for both sides of a boxscore.
+
+    Entries without a resolvable person id are skipped here (with a log) so no
+    downstream consumer has to guard against them.
+    """
     for side in ("away", "home"):
         side_data = (payload.get("teams") or {}).get(side) or {}
         team_id = (side_data.get("team") or {}).get("id")
         for entry in (side_data.get("players") or {}).values():
+            if not (entry.get("person") or {}).get("id"):
+                log.warning("mlb_boxscore_entry_missing_person", team_id=team_id)
+                continue
             yield team_id, entry
 
 
@@ -325,7 +338,6 @@ async def _upsert_players(session: AsyncSession, payload: dict) -> int:
             "position": (entry.get("position") or {}).get("abbreviation", ""),
         }
         for team_id, entry in _iter_boxscore_players(payload)
-        if (entry.get("person") or {}).get("id")
     ]
     if not rows:
         return 0
@@ -362,11 +374,15 @@ async def _upsert_log_rows(session: AsyncSession, model, rows: list[dict]) -> in
     return len(rows)
 
 
-async def ingest_mlb_boxscore(session: AsyncSession, game_pk: int) -> tuple[int, int]:
+async def ingest_mlb_boxscore(
+    session: AsyncSession, game_pk: int, use_cache: bool = True
+) -> tuple[int, int]:
     """Ingest one game's batter + pitcher logs. Returns (batter_rows, pitcher_rows).
 
     The game's `mlb_games` row must already exist (schedule ingest supplies the
-    game_date/season the log rows carry).
+    game_date/season the log rows carry). Pass use_cache=False when official
+    scorer corrections may still land (the daily cron does), so re-ingests
+    reconcile instead of replaying a stale cached payload forever.
     """
     game = (
         await session.execute(select(MlbGame).where(MlbGame.game_pk == game_pk))
@@ -377,7 +393,7 @@ async def ingest_mlb_boxscore(session: AsyncSession, game_pk: int) -> tuple[int,
             f"mlb_games row missing for game_pk={game_pk}; run schedule ingest first"
         )
 
-    payload = await _fetch_json(f"game/{game_pk}/boxscore")
+    payload = await _fetch_json(f"game/{game_pk}/boxscore", use_cache=use_cache)
 
     side_teams = [
         (payload.get("teams") or {}).get(side, {}).get("team", {})
@@ -399,7 +415,20 @@ async def ingest_mlb_boxscore(session: AsyncSession, game_pk: int) -> tuple[int,
 
 
 def is_final_status(status: str) -> bool:
+    """Prefix fallback for rows that predate the abstract_state column."""
     return status.startswith(_FINAL_STATUS_PREFIXES)
+
+
+def game_is_final(game: MlbGame) -> bool:
+    """True when a game is over and its boxscore is authoritative.
+
+    Prefers the upstream abstractGameState enum (Preview/Live/Final), which
+    also covers oddball detailedStates like forfeits; falls back to the
+    detailedState prefix check when abstract_state was never captured.
+    """
+    if game.abstract_state:
+        return game.abstract_state == "Final"
+    return is_final_status(game.status)
 
 
 async def ingest_mlb_date(session: AsyncSession, game_date: date) -> dict[str, int]:
@@ -409,7 +438,7 @@ async def ingest_mlb_date(session: AsyncSession, game_date: date) -> dict[str, i
     status is final get boxscores; a no-games day returns zeros without error.
     """
     games = await ingest_mlb_schedule(session, game_date, game_date, use_cache=False)
-    summary = {"games": games, "batter_rows": 0, "pitcher_rows": 0}
+    summary = {"games": games, "batter_rows": 0, "pitcher_rows": 0, "failed_games": 0}
     if games == 0:
         return summary
 
@@ -417,10 +446,18 @@ async def ingest_mlb_date(session: AsyncSession, game_date: date) -> dict[str, i
         await session.execute(select(MlbGame).where(MlbGame.date == game_date))
     ).scalars().all()
     for game in rows:
-        if not is_final_status(game.status):
+        if not game_is_final(game):
             log.info("mlb_game_not_final_skipped", game_pk=game.game_pk, status=game.status)
             continue
-        batters, pitchers = await ingest_mlb_boxscore(session, game.game_pk)
+        try:
+            batters, pitchers = await ingest_mlb_boxscore(
+                session, game.game_pk, use_cache=False
+            )
+        except IngestError as exc:
+            # One bad boxscore must not sink the rest of the day's games.
+            summary["failed_games"] += 1
+            log.error("mlb_boxscore_failed", game_pk=game.game_pk, error=str(exc))
+            continue
         summary["batter_rows"] += batters
         summary["pitcher_rows"] += pitchers
     return summary

@@ -13,10 +13,12 @@ from chalk.mlb.fetcher import (
     _build_pitcher_rows,
     _cache_path,
     _fetch_json,
+    game_is_final,
     ingest_mlb_boxscore,
     ingest_mlb_date,
     ingest_mlb_schedule,
     ingest_mlb_teams,
+    is_final_status,
 )
 from chalk.mlb.models import (
     MlbBatterGameLog,
@@ -49,6 +51,8 @@ def fake_api(monkeypatch):
         calls.append(path)
         for prefix, payload in routes.items():
             if path.startswith(prefix):
+                if isinstance(payload, Exception):
+                    raise payload
                 return payload
         raise AssertionError(f"unexpected StatsAPI path: {path}")
 
@@ -178,6 +182,38 @@ class TestIngestSchedule:
         assert rows[0].status == "Completed Early"
 
 
+class TestFinality:
+    def test_is_final_status_prefixes(self):
+        assert is_final_status("Final")
+        assert is_final_status("Final: Tied")
+        assert is_final_status("Game Over")
+        assert is_final_status("Completed Early: Rain")
+        assert not is_final_status("In Progress")
+        assert not is_final_status("Scheduled")
+
+    def test_game_is_final_prefers_abstract_state(self):
+        # Forfeit-style oddball: detailedState unknown to the prefix list, but
+        # the upstream abstract state says the game is over.
+        forfeit = MlbGame(
+            game_pk=1, date=date(2024, 6, 1), season="2024", game_type="R",
+            home_team_id=147, away_team_id=147,
+            status="Forfeit", abstract_state="Final",
+        )
+        live = MlbGame(
+            game_pk=2, date=date(2024, 6, 1), season="2024", game_type="R",
+            home_team_id=147, away_team_id=147,
+            status="In Progress", abstract_state="Live",
+        )
+        legacy = MlbGame(  # row predating the abstract_state column
+            game_pk=3, date=date(2024, 6, 1), season="2024", game_type="R",
+            home_team_id=147, away_team_id=147,
+            status="Final", abstract_state=None,
+        )
+        assert game_is_final(forfeit) is True
+        assert game_is_final(live) is False
+        assert game_is_final(legacy) is True
+
+
 class TestBoxscoreParsers:
     def test_batter_rows_skip_non_batters(self):
         rows = _build_batter_rows(
@@ -265,12 +301,61 @@ class TestIngestDate:
 
         await ingest_mlb_teams(session, 2024)
         summary = await ingest_mlb_date(session, date(2024, 6, 1))
-        assert summary == {"games": 1, "batter_rows": 3, "pitcher_rows": 2}
+        assert summary == {"games": 1, "batter_rows": 3, "pitcher_rows": 2, "failed_games": 0}
 
     async def test_no_games_day_is_healthy(self, session, fake_api):
         fake_api.routes["schedule"] = {"dates": []}
         summary = await ingest_mlb_date(session, date(2024, 12, 25))
-        assert summary == {"games": 0, "batter_rows": 0, "pitcher_rows": 0}
+        assert summary == {"games": 0, "batter_rows": 0, "pitcher_rows": 0, "failed_games": 0}
+
+    async def test_one_failed_boxscore_does_not_sink_the_day(self, session, fake_api):
+        """A permanent boxscore failure is counted, logged, and skipped."""
+        payload = _load("schedule_single.json")
+        second = json.loads(json.dumps(payload["dates"][0]["games"][0]))
+        second["gamePk"] = 745124
+        second["gameNumber"] = 2
+        second["doubleHeader"] = "Y"
+        payload["dates"][0]["games"][0]["doubleHeader"] = "Y"
+        payload["dates"][0]["games"].append(second)
+
+        fake_api.routes["teams"] = _load("teams.json")
+        fake_api.routes["schedule"] = payload
+        fake_api.routes["game/745123/boxscore"] = IngestError("boxscore 404")
+        fake_api.routes["game/745124/boxscore"] = _load("boxscore_regular.json")
+
+        await ingest_mlb_teams(session, 2024)
+        summary = await ingest_mlb_date(session, date(2024, 6, 1))
+        assert summary == {
+            "games": 2, "batter_rows": 3, "pitcher_rows": 2, "failed_games": 1,
+        }
+
+    async def test_malformed_player_entry_skipped(self, session, fake_api):
+        """A boxscore entry without a person id is dropped, not a crash."""
+        payload = _load("boxscore_regular.json")
+        payload["teams"]["home"]["players"]["IDBROKEN"] = {
+            "position": {"abbreviation": "LF"},
+            "battingOrder": "400",
+            "stats": {"batting": {"atBats": 3, "plateAppearances": 3}, "pitching": {}},
+        }
+        fake_api.routes["teams"] = _load("teams.json")
+        fake_api.routes["schedule"] = _load("schedule_single.json")
+        fake_api.routes["game/745123/boxscore"] = payload
+
+        await ingest_mlb_teams(session, 2024)
+        summary = await ingest_mlb_date(session, date(2024, 6, 1))
+        # The malformed entry is excluded; the three real batters land.
+        assert summary["batter_rows"] == 3 and summary["failed_games"] == 0
+
+    async def test_malformed_schedule_game_skipped(self, session, fake_api):
+        """A schedule entry missing required keys is logged and skipped."""
+        payload = _load("schedule_single.json")
+        payload["dates"][0]["games"].append({"gameType": "R", "gamePk": 999})  # no teams
+        fake_api.routes["teams"] = _load("teams.json")
+        fake_api.routes["schedule"] = payload
+
+        await ingest_mlb_teams(session, 2024)
+        count = await ingest_mlb_schedule(session, date(2024, 6, 1), date(2024, 6, 1))
+        assert count == 1  # only the well-formed game
 
     async def test_non_final_games_skipped(self, session, fake_api):
         payload = _load("schedule_single.json")
@@ -281,4 +366,4 @@ class TestIngestDate:
 
         await ingest_mlb_teams(session, 2024)
         summary = await ingest_mlb_date(session, date(2024, 6, 1))
-        assert summary == {"games": 1, "batter_rows": 0, "pitcher_rows": 0}
+        assert summary == {"games": 1, "batter_rows": 0, "pitcher_rows": 0, "failed_games": 0}

@@ -26,10 +26,10 @@ def upgrade() -> None:
         sa.Column("team_id", sa.Integer(), primary_key=True),
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column("abbreviation", sa.String(length=5), nullable=False),
-        sa.Column("league", sa.String(length=20), nullable=False),
-        sa.Column("division", sa.String(length=30), nullable=False),
+        sa.Column("league", sa.String(length=20), nullable=True),
+        sa.Column("division", sa.String(length=30), nullable=True),
         sa.Column("venue", sa.String(length=100), nullable=True),
-        sa.Column("city", sa.String(length=50), nullable=False),
+        sa.Column("city", sa.String(length=50), nullable=True),
     )
 
     op.create_table(
@@ -66,8 +66,9 @@ def upgrade() -> None:
             "away_team_id", sa.Integer(), sa.ForeignKey("mlb_teams.team_id"), nullable=False
         ),
         sa.Column(
-            "status", sa.String(length=30), nullable=False, server_default="scheduled"
+            "status", sa.String(length=50), nullable=False, server_default="scheduled"
         ),
+        sa.Column("abstract_state", sa.String(length=20), nullable=True),
         sa.Column("venue", sa.String(length=100), nullable=True),
         sa.UniqueConstraint(
             "date", "home_team_id", "away_team_id", "game_number",
