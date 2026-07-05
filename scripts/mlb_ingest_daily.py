@@ -44,7 +44,7 @@ async def main_async() -> bool:
             log.info("step_done", step=name)
             return result
         except Exception as e:
-            log.error("step_failed", step=name, error=str(e))
+            log.error("step_failed", step=name, error=str(e), exc_info=True)
             failed = True
             return None
 
@@ -64,6 +64,10 @@ async def main_async() -> bool:
     )
     if summary is not None:
         log.info("mlb_yesterday_summary", date=str(yesterday), **summary)
+        # Per-game IngestErrors are isolated inside ingest_mlb_date; they still
+        # count as an unhealthy run for the exit-code contract.
+        if summary.get("failed_games", 0) > 0:
+            failed = True
 
     await run_step(
         "seed_today_mlb_schedule",

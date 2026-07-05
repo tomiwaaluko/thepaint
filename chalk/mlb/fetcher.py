@@ -38,7 +38,9 @@ log = structlog.get_logger()
 MLB_API_BASE = "https://statsapi.mlb.com/api/v1"
 CACHE_DIR: Path = settings.MLB_API_CACHE_DIR
 REQUEST_TIMEOUT = settings.MLB_API_TIMEOUT
-MAX_RETRIES = settings.MLB_API_MAX_RETRIES
+# Total attempts (not additional retries); floor of 1 so a misconfigured 0
+# still makes one request instead of failing without ever fetching.
+MAX_RETRIES = max(1, settings.MLB_API_MAX_RETRIES)
 BASE_DELAY = 2.0
 
 # F/D/L/W = postseason rounds; R = regular season. Spring training (S),
@@ -53,7 +55,10 @@ _FINAL_STATUS_PREFIXES = ("Final", "Game Over", "Completed")
 def _cache_path(path: str, params: dict) -> Path:
     # Sanitize path segments to prevent traversal — keep only alphanumerics/underscores
     safe = "".join(c for c in path if c.isalnum() or c == "_")
-    key = hashlib.md5(f"{safe}{sorted(params.items())}".encode()).hexdigest()
+    # Non-cryptographic use: md5 only derives a stable cache filename.
+    key = hashlib.md5(
+        f"{safe}{sorted(params.items())}".encode(), usedforsecurity=False
+    ).hexdigest()
     return CACHE_DIR / safe / f"{key}.json"
 
 
@@ -85,8 +90,11 @@ async def _fetch_json(path: str, params: dict | None = None, use_cache: bool = T
                 cache_file.write_text(json.dumps(data))
             log.info("mlb_fetch_success", path=path, attempt=attempt)
             return data
-        except Exception as exc:
-            delay = BASE_DELAY * (2**attempt) + random.uniform(0, 1)
+        # Transient classes only (network/HTTP via httpx, OS-level socket
+        # errors, bad JSON bodies); programming errors fail fast instead of
+        # burning MAX_RETRIES backoff cycles.
+        except (httpx.HTTPError, OSError, ValueError) as exc:
+            delay = BASE_DELAY * (2**attempt) + random.uniform(0, 1)  # noqa: S311 — jitter, not crypto
             log.warning(
                 "mlb_fetch_retry", path=path,
                 attempt=attempt, error=str(exc), delay=delay,

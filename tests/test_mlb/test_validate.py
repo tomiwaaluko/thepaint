@@ -27,6 +27,24 @@ class TestValidateMlbRowCounts:
         await _seed_final_game(session)
         assert await validate_mlb_row_counts(session, GAME_DATE) is False
 
+    async def test_partial_coverage_fails(self, session):
+        """One covered game must not mask another final game with no logs."""
+        await _seed_final_game(session)
+        session.add(MlbGame(
+            game_pk=745199, date=GAME_DATE, season="2024", game_type="R",
+            home_team_id=147, away_team_id=147, status="Final", game_number=2,
+        ))
+        session.add(MlbPlayer(player_id=543305, name="Aaron Judge", team_id=147, position="CF"))
+        session.add(MlbBatterGameLog(
+            game_pk=745123, player_id=543305, team_id=147,
+            game_date=GAME_DATE, season="2024",
+            ab=3, r=2, h=2, doubles=0, triples=0, hr=1, rbi=3, bb=2, so=0,
+            sb=1, cs=0, hbp=0, total_bases=5, plate_appearances=5, position="CF",
+        ))
+        await session.commit()
+        # 745123 covered, 745199 has zero logs → unhealthy.
+        assert await validate_mlb_row_counts(session, GAME_DATE) is False
+
     async def test_games_with_logs_is_healthy(self, session):
         await _seed_final_game(session)
         session.add(MlbPlayer(player_id=543305, name="Aaron Judge", team_id=147, position="CF"))

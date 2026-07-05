@@ -23,7 +23,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "mlb_teams",
-        sa.Column("team_id", sa.Integer(), primary_key=True),
+        sa.Column("team_id", sa.Integer(), primary_key=True, autoincrement=False),
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column("abbreviation", sa.String(length=5), nullable=False),
         sa.Column("league", sa.String(length=20), nullable=True),
@@ -34,7 +34,7 @@ def upgrade() -> None:
 
     op.create_table(
         "mlb_players",
-        sa.Column("player_id", sa.Integer(), primary_key=True),
+        sa.Column("player_id", sa.Integer(), primary_key=True, autoincrement=False),
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column(
             "team_id", sa.Integer(), sa.ForeignKey("mlb_teams.team_id"), nullable=True
@@ -48,7 +48,7 @@ def upgrade() -> None:
 
     op.create_table(
         "mlb_games",
-        sa.Column("game_pk", sa.Integer(), primary_key=True),
+        sa.Column("game_pk", sa.Integer(), primary_key=True, autoincrement=False),
         sa.Column("date", sa.Date(), nullable=False),
         sa.Column("season", sa.String(length=4), nullable=False),
         sa.Column("game_type", sa.String(length=1), nullable=False),
@@ -107,10 +107,10 @@ def upgrade() -> None:
         sa.Column("batting_order", sa.String(length=3), nullable=True),
         sa.Column("position", sa.String(length=5), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(), nullable=True, server_default=sa.func.now()
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
         ),
         sa.Column(
-            "updated_at", sa.DateTime(), nullable=True, server_default=sa.func.now()
+            "updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
         ),
         sa.UniqueConstraint("game_pk", "player_id", name="uq_mlb_batter_game"),
     )
@@ -150,10 +150,10 @@ def upgrade() -> None:
         sa.Column("save", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("hold", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column(
-            "created_at", sa.DateTime(), nullable=True, server_default=sa.func.now()
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
         ),
         sa.Column(
-            "updated_at", sa.DateTime(), nullable=True, server_default=sa.func.now()
+            "updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
         ),
         sa.UniqueConstraint("game_pk", "player_id", name="uq_mlb_pitcher_game"),
     )

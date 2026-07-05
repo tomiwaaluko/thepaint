@@ -14,7 +14,7 @@ def mocked_steps(engine, monkeypatch):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(db_session, "async_session_factory", factory)
 
-    state = {"validate_ok": True, "raise_in": None, "calls": []}
+    state = {"validate_ok": True, "raise_in": None, "failed_games": 0, "calls": []}
 
     async def _teams(session, season):
         state["calls"].append("teams")
@@ -26,7 +26,10 @@ def mocked_steps(engine, monkeypatch):
         state["calls"].append("yesterday")
         if state["raise_in"] == "yesterday":
             raise RuntimeError("date boom")
-        return {"games": 2, "batter_rows": 10, "pitcher_rows": 5}
+        return {
+            "games": 2, "batter_rows": 10, "pitcher_rows": 5,
+            "failed_games": state["failed_games"],
+        }
 
     async def _schedule(session, start, end, use_cache=True):
         state["calls"].append("today")
@@ -54,9 +57,17 @@ class TestExitCodeMatrix:
         mocked_steps["validate_ok"] = False
         assert await main_async() is True
 
-    async def test_step_exception_marks_failed_but_continues(self, mocked_steps):
-        mocked_steps["raise_in"] = "yesterday"
+    @pytest.mark.parametrize("failing_step", ["teams", "yesterday", "today"])
+    async def test_step_exception_marks_failed_but_continues(
+        self, mocked_steps, failing_step
+    ):
+        mocked_steps["raise_in"] = failing_step
         assert await main_async() is True
         # Later steps still ran despite the earlier failure.
-        assert "today" in mocked_steps["calls"]
+        assert "validate" in mocked_steps["calls"]
+
+    async def test_partial_day_failed_games_marks_failed(self, mocked_steps):
+        """Per-game failures isolated inside ingest_mlb_date still exit 1."""
+        mocked_steps["failed_games"] = 1
+        assert await main_async() is True
         assert "validate" in mocked_steps["calls"]

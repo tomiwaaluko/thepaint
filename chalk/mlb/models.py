@@ -27,7 +27,8 @@ from chalk.db.models import Base
 class MlbTeam(Base):
     __tablename__ = "mlb_teams"
 
-    team_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Upstream StatsAPI id — never generated locally.
+    team_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     abbreviation: Mapped[str] = mapped_column(String(5), nullable=False)
     # Nullable: stub rows upserted for FK safety carry only id+name until a
@@ -44,7 +45,7 @@ class MlbTeam(Base):
 class MlbPlayer(Base):
     __tablename__ = "mlb_players"
 
-    player_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    player_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     # Last-seen team; null tolerated (free agents, releases).
     team_id: Mapped[int | None] = mapped_column(ForeignKey("mlb_teams.team_id"))
@@ -67,7 +68,7 @@ class MlbGame(Base):
         ),
     )
 
-    game_pk: Mapped[int] = mapped_column(Integer, primary_key=True)
+    game_pk: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     season: Mapped[str] = mapped_column(String(4), nullable=False)
     # R = regular season; F/D/L/W = postseason rounds (wild card → World Series).

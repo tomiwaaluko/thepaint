@@ -107,16 +107,66 @@ class TestBackfillSeason:
         assert 745124 not in completed
         assert completed == {745123, 745125}
 
-    async def test_progress_persisted_after_each_game(
-        self, session, seeded_games, quiet_backfill, monkeypatch, tmp_path
+    async def test_db_error_skips_game_and_continues(
+        self, session, seeded_games, quiet_backfill, monkeypatch
     ):
+        """DB-level failures are per-game skips too, with a rollback."""
+        from sqlalchemy.exc import OperationalError
+
         await seeded_games()
 
+        async def _db_boom(sess, game_pk):
+            if game_pk == 745124:
+                raise OperationalError("stmt", {}, Exception("db down"))
+            return (2, 2)
+
+        monkeypatch.setattr(backfill_mod, "ingest_mlb_boxscore", _db_boom)
+        completed: set[int] = set()
+        done, skipped = await backfill_season(session, 2024, completed)
+        assert done == 2 and skipped == 1
+        assert completed == {745123, 745125}
+
+    async def test_progress_flushed_incrementally(
+        self, session, seeded_games, quiet_backfill, monkeypatch, tmp_path
+    ):
+        """With flush-every-1, progress hits disk mid-run, not just at the end."""
+        await seeded_games()
+        monkeypatch.setattr(backfill_mod, "PROGRESS_FLUSH_EVERY", 1)
+        mid_run_snapshots = []
+
         async def _fake_boxscore(sess, game_pk):
+            progress = tmp_path / "progress.json"
+            if progress.exists():
+                mid_run_snapshots.append(set(json.loads(progress.read_text())["completed"]))
             return (1, 1)
 
         monkeypatch.setattr(backfill_mod, "ingest_mlb_boxscore", _fake_boxscore)
         await backfill_season(session, 2024, set())
 
+        # By the third game's ingest, the first two were already on disk.
+        assert mid_run_snapshots[-1] == {745123, 745124}
         saved = json.loads((tmp_path / "progress.json").read_text())
         assert set(saved["completed"]) == {745123, 745124, 745125}
+
+    async def test_backfill_iterates_seasons(self, quiet_backfill, monkeypatch):
+        """backfill() walks the season range and shares the completed set."""
+        from unittest.mock import MagicMock
+
+        seen = []
+
+        async def _fake_season(session, season, completed):
+            seen.append(season)
+            completed.add(700000 + season)
+            return (1, 0)
+
+        class _FakeSessionCtx:
+            async def __aenter__(self):
+                return MagicMock()
+
+            async def __aexit__(self, *args):
+                return False
+
+        monkeypatch.setattr(backfill_mod, "backfill_season", _fake_season)
+        monkeypatch.setattr(backfill_mod, "async_session_factory", lambda: _FakeSessionCtx())
+        await backfill_mod.backfill(2023, 2025)
+        assert seen == [2023, 2024, 2025]

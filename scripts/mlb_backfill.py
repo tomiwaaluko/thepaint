@@ -2,9 +2,10 @@
 
 Usage: python scripts/mlb_backfill.py [--start-season 2018] [--end-season 2026]
 
-Resumable: completed gamePks are persisted to a progress file after every game,
-so a failed run continues where it left off. One failed boxscore is skipped and
-logged, never aborting the season.
+Resumable: completed gamePks are persisted to a progress file periodically
+(every PROGRESS_FLUSH_EVERY games and at season end), so a failed run continues
+near where it left off. One failed boxscore is skipped and logged, never
+aborting the season; re-ingestion of the small unflushed tail is idempotent.
 """
 import argparse
 import asyncio
@@ -14,6 +15,7 @@ from pathlib import Path
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from chalk.db.session import async_session_factory
 from chalk.exceptions import IngestError
@@ -79,26 +81,31 @@ async def backfill_season(session, season: int, completed: set[int]) -> tuple[in
     result = await session.execute(
         select(MlbGame).where(MlbGame.season == str(season)).order_by(MlbGame.date)
     )
-    games = [g for g in result.scalars().all() if game_is_final(g)]
+    # Snapshot plain gamePks: a mid-loop rollback expires ORM instances, and
+    # touching an expired attribute would force a lazy refresh mid-iteration.
+    final_pks = [g.game_pk for g in result.scalars().all() if game_is_final(g)]
 
     done = 0
     skipped = 0
-    for game in games:
-        if game.game_pk in completed:
+    for game_pk in final_pks:
+        if game_pk in completed:
             continue
         try:
-            batters, pitchers = await ingest_mlb_boxscore(session, game.game_pk)
-            completed.add(game.game_pk)
+            batters, pitchers = await ingest_mlb_boxscore(session, game_pk)
+            completed.add(game_pk)
             done += 1
             log.info(
                 "mlb_backfill_progress",
-                season=season, game_pk=game.game_pk,
+                season=season, game_pk=game_pk,
                 batters=batters, pitchers=pitchers,
                 completed_total=len(completed),
             )
-        except IngestError as e:
+        except (IngestError, SQLAlchemyError) as e:
+            # DB-level failures are also per-game skips; roll back so the
+            # session stays usable for the rest of the season.
+            await session.rollback()
             skipped += 1
-            log.error("mlb_backfill_skip", game_pk=game.game_pk, error=str(e))
+            log.error("mlb_backfill_skip", game_pk=game_pk, error=str(e))
         if (done + skipped) % PROGRESS_FLUSH_EVERY == 0:
             save_progress(completed)
         await asyncio.sleep(INTER_REQUEST_DELAY)

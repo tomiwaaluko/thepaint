@@ -2,7 +2,7 @@
 from datetime import date
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.mlb.fetcher import game_is_final
@@ -26,31 +26,32 @@ async def validate_mlb_row_counts(session: AsyncSession, game_date: date) -> boo
         log.info("no_mlb_games_to_validate", date=str(game_date))
         return True
 
-    batter_count = (
-        await session.execute(
-            select(func.count())
-            .select_from(MlbBatterGameLog)
-            .where(MlbBatterGameLog.game_date == game_date)
-        )
-    ).scalar_one()
-    pitcher_count = (
-        await session.execute(
-            select(func.count())
-            .select_from(MlbPitcherGameLog)
-            .where(MlbPitcherGameLog.game_date == game_date)
-        )
-    ).scalar_one()
-
-    if batter_count + pitcher_count == 0:
+    # Per-game coverage, not a date-wide total: one covered game must not
+    # mask nine uncovered ones.
+    covered = set(
+        (
+            await session.execute(
+                select(MlbBatterGameLog.game_pk)
+                .where(MlbBatterGameLog.game_date == game_date)
+                .union(
+                    select(MlbPitcherGameLog.game_pk)
+                    .where(MlbPitcherGameLog.game_date == game_date)
+                )
+            )
+        ).scalars().all()
+    )
+    missing = sorted({g.game_pk for g in final_games} - covered)
+    if missing:
         log.warning(
             "validation_failed_no_mlb_logs",
             date=str(game_date), final_games=len(final_games),
+            missing_games=missing,
         )
         return False
 
     log.info(
         "mlb_validation_ok",
         date=str(game_date), final_games=len(final_games),
-        batter_logs=batter_count, pitcher_logs=pitcher_count,
+        covered_games=len(covered),
     )
     return True
