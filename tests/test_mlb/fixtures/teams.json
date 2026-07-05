@@ -1,0 +1,34 @@
+{
+  "teams": [
+    {
+      "id": 147,
+      "name": "New York Yankees",
+      "abbreviation": "NYY",
+      "teamName": "Yankees",
+      "locationName": "Bronx",
+      "league": {"id": 103, "name": "American League"},
+      "division": {"id": 201, "name": "American League East"},
+      "venue": {"id": 3313, "name": "Yankee Stadium"}
+    },
+    {
+      "id": 111,
+      "name": "Boston Red Sox",
+      "abbreviation": "BOS",
+      "teamName": "Red Sox",
+      "locationName": "Boston",
+      "league": {"id": 103, "name": "American League"},
+      "division": {"id": 201, "name": "American League East"},
+      "venue": {"id": 3, "name": "Fenway Park"}
+    },
+    {
+      "id": 119,
+      "name": "Los Angeles Dodgers",
+      "abbreviation": "LAD",
+      "teamName": "Dodgers",
+      "locationName": "Los Angeles",
+      "league": {"id": 104, "name": "National League"},
+      "division": {"id": 203, "name": "National League West"},
+      "venue": {"id": 22, "name": "Dodger Stadium"}
+    }
+  ]
+}

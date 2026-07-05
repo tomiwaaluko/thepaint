@@ -1,0 +1,24 @@
+{
+  "dates": [
+    {
+      "date": "2024-06-01",
+      "games": [
+        {
+          "gamePk": 745123,
+          "gameType": "R",
+          "season": "2024",
+          "gameDate": "2024-06-01T23:05:00Z",
+          "officialDate": "2024-06-01",
+          "status": {"abstractGameState": "Final", "detailedState": "Final"},
+          "teams": {
+            "away": {"team": {"id": 111, "name": "Boston Red Sox"}},
+            "home": {"team": {"id": 147, "name": "New York Yankees"}}
+          },
+          "doubleHeader": "N",
+          "gameNumber": 1,
+          "venue": {"id": 3313, "name": "Yankee Stadium"}
+        }
+      ]
+    }
+  ]
+}

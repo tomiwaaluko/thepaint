@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from chalk.db.models import Base
+import chalk.mlb.models  # noqa: F401  — registers MLB tables on Base.metadata
 
 config = context.config
 

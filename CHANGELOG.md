@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-07-05
+
+### Done
+- **MLB expansion, slice 1 (data foundation)** on `feature/mlb-expansion` via the new `/chalk-feature` workflow (brainstorm → plan → work → review → ship, five specs in `specs/feature-mlb-expansion/`).
+- New additive `chalk/mlb/` package: 5 ORM tables on the shared `Base` (`mlb_teams`, `mlb_players`, `mlb_games`, `mlb_batter_game_logs`, `mlb_pitcher_game_logs`), MLB StatsAPI fetcher (keyless, httpx, disk cache + exponential backoff → `IngestError`), warn-style row-count validation.
+- Domain correctness baked into the schema: gamePk identity (doubleheader-safe matchup uniqueness incl. `game_number`), separate batter/pitcher log tables (two-way players get one row in each), `outs_recorded` integer instead of base-3 IP floats, postseason flag from `gameType`, `abstract_state` (upstream Preview/Live/Final) as the canonical finality signal.
+- Runners: resumable `scripts/mlb_backfill.py` (2018→present, progress file flushed every 25 games, per-game error isolation, live windows never disk-cached) and cron-ready `scripts/mlb_ingest_daily.py` (exit 0/1 contract mirroring `railway_ingest.py`; not yet wired to a Railway service by design).
+- Additive Alembic migration `f6a7b8c9d0e1` (up/down round-trip verified; no existing table touched — safe on shared Supabase).
+- Independent 8-angle review (line-by-line, removed-behavior, cross-file, reuse, simplification, efficiency, altitude, conventions) + fixes for all blocking findings.
+
+### Metrics
+- Full suite: **301 passed** (baseline 255 → +46 net new); `tests/test_mlb/` = 53 tests; new-module coverage 93% (fetcher 94%, models/validate 100%, backfill 81%, daily 90%).
+- 1 known failure: pre-existing timezone flake `test_today_games_no_stale_fallback` (NBA games API test, unrelated to this diff — fails only in the ~4h window after midnight UTC).
+
+### Pending
+- PR into `railway` + CodeRabbit triage; post-merge `alembic upgrade head` on Supabase; operator-run backfill (~19k games at ~1 req/s).
+- Verify pitcher win/loss/save/hold are per-game flags on first live ingest (proxy blocked statsapi.mlb.com from the dev environment).
+
+### Next
+- Slice 2: MLB feature engineering (rolling windows with the `as_of_date` gate, opposing-pitcher profiles, park factors) on a fresh `feature/` branch; `core/` refactor branch to de-duplicate NBA↔MLB helpers.
+
+
 ## 2026-07-04
 
 ### Done

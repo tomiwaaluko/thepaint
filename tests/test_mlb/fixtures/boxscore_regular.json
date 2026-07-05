@@ -1,0 +1,82 @@
+{
+  "teams": {
+    "away": {
+      "team": {"id": 111, "name": "Boston Red Sox", "abbreviation": "BOS"},
+      "players": {
+        "ID646240": {
+          "person": {"id": 646240, "fullName": "Rafael Devers"},
+          "position": {"abbreviation": "3B"},
+          "battingOrder": "200",
+          "stats": {
+            "batting": {
+              "atBats": 4, "runs": 0, "hits": 1, "doubles": 0, "triples": 0,
+              "homeRuns": 0, "rbi": 1, "baseOnBalls": 1, "strikeOuts": 2,
+              "stolenBases": 0, "caughtStealing": 0, "hitByPitch": 0,
+              "totalBases": 1, "plateAppearances": 5
+            },
+            "pitching": {}
+          }
+        },
+        "ID678394": {
+          "person": {"id": 678394, "fullName": "Brayan Bello"},
+          "position": {"abbreviation": "P"},
+          "stats": {
+            "batting": {},
+            "pitching": {
+              "gamesStarted": 1, "outs": 16, "hits": 7, "runs": 4,
+              "earnedRuns": 4, "baseOnBalls": 2, "strikeOuts": 5,
+              "homeRuns": 2, "battersFaced": 25, "numberOfPitches": 98,
+              "wins": 0, "losses": 1, "saves": 0, "holds": 0
+            }
+          }
+        }
+      }
+    },
+    "home": {
+      "team": {"id": 147, "name": "New York Yankees", "abbreviation": "NYY"},
+      "players": {
+        "ID660271": {
+          "person": {"id": 660271, "fullName": "Shohei Ohtani"},
+          "position": {"abbreviation": "TWP"},
+          "battingOrder": "100",
+          "stats": {
+            "batting": {
+              "atBats": 4, "runs": 1, "hits": 2, "doubles": 1, "triples": 0,
+              "homeRuns": 1, "rbi": 2, "baseOnBalls": 0, "strikeOuts": 1,
+              "stolenBases": 0, "caughtStealing": 0, "hitByPitch": 0,
+              "totalBases": 6, "plateAppearances": 4
+            },
+            "pitching": {
+              "gamesStarted": 1, "outs": 18, "hits": 4, "runs": 2,
+              "earnedRuns": 2, "baseOnBalls": 1, "strikeOuts": 8,
+              "homeRuns": 1, "battersFaced": 23, "numberOfPitches": 95,
+              "wins": 1, "losses": 0, "saves": 0, "holds": 0
+            }
+          }
+        },
+        "ID543305": {
+          "person": {"id": 543305, "fullName": "Aaron Judge"},
+          "position": {"abbreviation": "CF"},
+          "battingOrder": "300",
+          "stats": {
+            "batting": {
+              "atBats": 3, "runs": 2, "hits": 2, "doubles": 0, "triples": 0,
+              "homeRuns": 1, "rbi": 3, "baseOnBalls": 2, "strikeOuts": 0,
+              "stolenBases": 1, "caughtStealing": 0, "hitByPitch": 0,
+              "totalBases": 5, "plateAppearances": 5
+            },
+            "pitching": {}
+          }
+        },
+        "ID556789": {
+          "person": {"id": 556789, "fullName": "Bench Guy"},
+          "position": {"abbreviation": "C"},
+          "stats": {
+            "batting": {},
+            "pitching": {}
+          }
+        }
+      }
+    }
+  }
+}

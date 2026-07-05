@@ -15,6 +15,33 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ---
 
+## MLB Expansion — Slice 1: Data Foundation (2026-07-05)
+
+Branch `feature/mlb-expansion` (PR into `railway`). First slice of the second
+sport: additive `chalk/mlb/` package — **zero NBA behavior changed**.
+
+- **What & why:** MLB chosen over NFL (daily cadence matches the cron
+  architecture; 162-game samples; clean batter-vs-pitcher matchup unit).
+  Sliced delivery: data foundation first; features → models → API/betting/
+  fantasy as follow-up branches. Option A layout (core/nba/mlb packages) is
+  the agreed target; the NBA→`nba/` move is deferred to a `/chalk-refactor`
+  branch (additive-first decision).
+- **Files:** `chalk/mlb/{models,fetcher,validate}.py`, migration
+  `f6a7b8c9d0e1_add_mlb_tables`, `scripts/mlb_backfill.py`,
+  `scripts/mlb_ingest_daily.py`, `tests/test_mlb/` (5 fixture files, 58 tests
+  incl. scaffold), settings in `chalk/config.py` + `.env.example`, five specs
+  in `specs/feature-mlb-expansion/`.
+- **Status:** code + tests complete (301 passed full suite; one pre-existing
+  timezone flake in `test_today_games_no_stale_fallback` unrelated to diff);
+  independent 8-angle review done, blocking findings fixed (abstract_state
+  finality, per-game failure isolation, uncached live windows, malformed-entry
+  guards). PR pending merge; backfill is operator-run post-merge.
+- **Deferred / discovered:** pitcher decision-flag verification on first live
+  ingest; `bats/throws/birth_date` enrichment; shared-helper extraction into
+  `core/` (with the refactor branch); NBA games-API timezone flake fix.
+
+---
+
 ## Tooling — Chalk Dev Flow (2026-07-04)
 
 Agentic, self-correcting Git workflows under `.claude/`, Compound-Engineering-style.

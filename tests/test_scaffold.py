@@ -58,7 +58,9 @@ class TestORMModels:
             "teams", "players", "games", "player_game_logs",
             "team_game_logs", "injuries", "betting_lines", "predictions",
         }
-        assert expected == tables
+        # Subset, not equality: other sport packages (e.g. chalk.mlb) register
+        # additional tables on the shared Base when imported.
+        assert expected <= tables
 
     @pytest.mark.asyncio
     async def test_create_team(self, session):
