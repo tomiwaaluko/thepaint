@@ -1,5 +1,5 @@
 """Fantasy scoring routes."""
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 import redis.asyncio as aioredis
@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.api.cache import get_cached, set_cached
 from chalk.api.dependencies import get_db, get_redis
-from chalk.api.schemas import GAME_ID_PATTERN, FantasyScores
+from chalk.api.schemas import GAME_ID_PATTERN
 from chalk.api.schemas_betting import FantasyProjectionResponse, SlateFantasyResponse
-from chalk.db.models import Game, PlayerGameLog, Team
+from chalk.db.models import Game, PlayerGameLog
 from chalk.exceptions import PredictionError
 from chalk.fantasy.scoring import compute_all_fantasy_scores
 from chalk.fantasy.simulation import simulate_fantasy_scores

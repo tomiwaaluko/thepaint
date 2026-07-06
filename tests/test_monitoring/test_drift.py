@@ -3,12 +3,10 @@ from datetime import date, timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.db.models import Game, Player, PlayerGameLog, Prediction, Team
 from chalk.monitoring.drift import (
-    BASELINE_MAES,
     DRIFT_THRESHOLD,
     DriftReport,
     check_for_drift,

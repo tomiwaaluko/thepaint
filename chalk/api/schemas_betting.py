@@ -1,7 +1,6 @@
 """Additional schemas for betting and fantasy routes."""
-from dataclasses import dataclass
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from chalk.api.schemas import FantasyScores
 

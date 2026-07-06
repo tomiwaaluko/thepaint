@@ -1,7 +1,6 @@
 """Tests for player stat model training."""
 import numpy as np
 import pandas as pd
-import pytest
 
 from chalk.models.player import train_player_stat_model
 from chalk.models.validation import TRAIN_SEASONS, VALID_SEASON, TEST_SEASON

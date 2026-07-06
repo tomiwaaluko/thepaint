@@ -1,7 +1,6 @@
 """Tests for walk-forward CV and data splitting."""
 import numpy as np
 import pandas as pd
-import pytest
 
 from chalk.models.validation import (
     TRAIN_SEASONS,

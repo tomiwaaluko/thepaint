@@ -1,9 +1,8 @@
 """Tests for fantasy scoring engine."""
-import pytest
 
 from chalk.api.schemas import StatPrediction
 from chalk.fantasy.scoring import compute_all_fantasy_scores, compute_fantasy_score
-from chalk.fantasy.simulation import SimulationResult, simulate_fantasy_scores
+from chalk.fantasy.simulation import simulate_fantasy_scores
 
 
 class TestComputeFantasyScore:
@@ -29,11 +28,6 @@ class TestComputeFantasyScore:
         stats = {"pts": 20.0, "reb": 12.0, "ast": 5.0, "stl": 1.0, "blk": 0.5,
                  "to_committed": 2.0, "fg3m": 1.0}
         score = compute_fantasy_score(stats, "draftkings")
-        # Base + 1.5 DD bonus
-        score_no_bonus = compute_fantasy_score(
-            {"pts": 9.0, "reb": 12.0, "ast": 5.0, "stl": 1.0, "blk": 0.5,
-             "to_committed": 2.0, "fg3m": 1.0}, "draftkings"
-        )
         # pts=20 gives DD (pts+reb >= 10), pts=9 does not
         stats_no_dd = dict(stats)
         stats_no_dd["pts"] = 9.0  # only reb >= 10 now

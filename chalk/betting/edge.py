@@ -2,7 +2,7 @@
 from datetime import date, timedelta
 
 import structlog
-from sqlalchemy import select, text, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.db.models import BettingLine, PlayerGameLog, Prediction

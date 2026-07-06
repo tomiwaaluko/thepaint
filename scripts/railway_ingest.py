@@ -126,7 +126,7 @@ async def main_async() -> bool:
             p_result = await session.execute(
                 select(Player.player_id)
                 .where(Player.team_id.in_(team_ids))
-                .where(Player.is_active == True)
+                .where(Player.is_active.is_(True))
             )
             player_ids = [r[0] for r in p_result.all()]
 

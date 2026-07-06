@@ -1,15 +1,9 @@
 """Tests for prediction engines — mocked models and features."""
-from datetime import date, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
-import pytest
 
-from chalk.api.schemas import PlayerPredictionResponse
 from chalk.predictions.player import (
     _compute_fantasy_scores,
     _get_stat_value,
-    predict_player,
 )
 from chalk.api.schemas import StatPrediction
 

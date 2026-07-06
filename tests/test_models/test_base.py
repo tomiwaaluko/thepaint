@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from chalk.exceptions import ModelNotFoundError
-from chalk.models.base import BaseStatModel, DEFAULT_XGB_PARAMS
+from chalk.models.base import BaseStatModel
 
 
 def _make_data(n=200, n_features=10, seed=42):

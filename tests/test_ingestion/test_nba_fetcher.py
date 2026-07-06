@@ -613,7 +613,8 @@ class TestFetchWithBackoff:
         ) if hasattr(_cache_path, "__wrapped__") else None
 
         # Manually compute the cache path with monkeypatched dir
-        import hashlib, json
+        import hashlib
+        import json
         key = hashlib.md5(f"TestEndpoint{sorted({'key': 'val'}.items())}".encode()).hexdigest()
         cache_file = tmp_path / "TestEndpoint" / f"{key}.json"
         cache_file.write_text(json.dumps({"data": "cached"}))

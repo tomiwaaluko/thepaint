@@ -1,5 +1,5 @@
 """Player prediction routes."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query

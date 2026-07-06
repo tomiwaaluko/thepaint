@@ -35,9 +35,9 @@ def _run_async(coro):
 
 def ingest_yesterday_games(**context):
     """Ingest player and team game logs from yesterday."""
-    from sqlalchemy import select, func
+    from sqlalchemy import select
     from chalk.db.session import async_session_factory
-    from chalk.db.models import Game, PlayerGameLog, TeamGameLog
+    from chalk.db.models import Game, PlayerGameLog
     from chalk.ingestion.nba_fetcher import NBAFetcher
 
     yesterday = (datetime.utcnow() - timedelta(days=1)).date()

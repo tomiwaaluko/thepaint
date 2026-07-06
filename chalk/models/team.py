@@ -1,7 +1,7 @@
 """Team total points model."""
 import structlog
 
-from chalk.models.base import DEFAULT_XGB_PARAMS, MAE_TARGETS, BaseStatModel
+from chalk.models.base import MAE_TARGETS, BaseStatModel
 from chalk.models.validation import (
     check_for_leakage,
     get_feature_cols,

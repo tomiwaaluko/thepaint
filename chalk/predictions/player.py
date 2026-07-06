@@ -1,7 +1,6 @@
 """Player prediction engine — generates full statline predictions."""
 from datetime import date, datetime, timedelta
 
-import numpy as np
 import pandas as pd
 import structlog
 from sqlalchemy import select
@@ -13,7 +12,7 @@ from chalk.api.schemas import (
     PlayerPredictionResponse,
     StatPrediction,
 )
-from chalk.db.models import Game, Injury, Player, PlayerGameLog, Team
+from chalk.db.models import Game, Injury, Player, Team
 from chalk.exceptions import PredictionError
 from chalk.features.pipeline import generate_features
 from chalk.models.registry import (

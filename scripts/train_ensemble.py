@@ -9,15 +9,12 @@ Usage:
     python scripts/train_ensemble.py --skip-tune    # Skip Optuna, use default params
 """
 import argparse
-import asyncio
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import structlog
 
-from chalk.db.session import async_session_factory
-from chalk.models.base import DEFAULT_XGB_PARAMS, MAE_TARGETS
+from chalk.models.base import DEFAULT_XGB_PARAMS
 from chalk.models.ensemble import StackedEnsemble
 from chalk.models.lgbm import DEFAULT_LGBM_PARAMS, LGBMStatModel
 from chalk.models.registry import save_ensemble_model, save_lgbm_model
