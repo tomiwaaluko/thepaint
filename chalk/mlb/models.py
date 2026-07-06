@@ -60,13 +60,11 @@ class MlbPlayer(Base):
 
 class MlbGame(Base):
     __tablename__ = "mlb_games"
-    __table_args__ = (
-        # game_number distinguishes doubleheader legs on the same date/matchup.
-        UniqueConstraint(
-            "date", "home_team_id", "away_team_id", "game_number",
-            name="uq_mlb_game_matchup",
-        ),
-    )
+    # game_pk is the authoritative identity of an MLB game. We deliberately do
+    # NOT add a (date, home, away, game_number) uniqueness constraint: MLB
+    # assigns a distinct gamePk to a postponed game's makeup while reusing the
+    # same date/teams/game_number, so multiple gamePks legitimately share that
+    # matchup tuple. Enforcing uniqueness on it rejects real makeup games.
 
     game_pk: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)

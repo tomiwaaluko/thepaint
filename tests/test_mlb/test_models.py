@@ -116,12 +116,19 @@ class TestORMModels:
         rows = (await session.execute(select(MlbGame))).scalars().all()
         assert len(rows) == 2
 
-    async def test_duplicate_matchup_same_game_number_rejected(self, session):
+    async def test_postponed_makeup_shares_matchup_tuple(self, session):
+        """Two gamePks may share (date, teams, game_number).
+
+        MLB gives a postponed game's makeup a new gamePk while reusing the same
+        date/teams/game_number, so there must be NO uniqueness constraint on
+        that tuple — game_pk is the only identity. Both rows must persist.
+        """
         session.add(_team())
         session.add(_game(game_pk=745123, game_number=1))
         session.add(_game(game_pk=745125, game_number=1))
-        with pytest.raises(IntegrityError):
-            await session.commit()
+        await session.commit()
+        rows = (await session.execute(select(MlbGame))).scalars().all()
+        assert {g.game_pk for g in rows} == {745123, 745125}
 
     async def test_two_way_player_has_batter_and_pitcher_rows(self, session):
         """A two-way player may produce one row in each log table for one game."""
