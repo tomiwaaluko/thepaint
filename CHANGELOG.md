@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-06 — Design: sportsbook expansion (PrizePicks + Hard Rock Bet) & feature brainstorm
+
+### Done
+- Brainstorming session (superpowers process) on `claude/railway-feature-brainstorm-vwifyt` (based on `railway`); design doc written to `docs/superpowers/specs/2026-07-06-sportsbook-expansion-and-feature-brainstorm-design.md`. No implementation — spec awaits user approval.
+- Verified Hard Rock Bet is already on The Odds API (key `hardrockbet`, region `us2`) — current fetcher only requests `us`, so adding `us,us2` is nearly free (≈2× quota per event).
+- Verified PrizePicks has no official API; recommended fail-soft fetcher against the community `api.prizepicks.com/projections` endpoint, reusing `betting_lines` with NULL odds + a new pick'em breakeven module (`chalk/betting/pickem.py`).
+- Ranked broader feature ideas: line-movement snapshots (prereq for Phase 8 CLV — current upsert destroys history), best-line shopping view, accuracy scoreboard, edge alerting, slip optimizer, Kelly sizing, backtester.
+
+### Metrics
+- None (design-only session; no code changed).
+
+### Pending
+- User review of the spec's 4 open questions (demon/goblin encoding, paid scraper fallback, whether line snapshots ship in slice 1, offseason testing via MLB markets).
+
+### Next
+- On approval: implement slice 1 (Hard Rock Bet via `us,us2` + quota check), then slice 2 (PrizePicks fetcher + value board).
+
 ## 2026-07-06 — Security audit: CI, dependency pinning, API abuse protection
 
 ### Done

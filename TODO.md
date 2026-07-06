@@ -15,6 +15,27 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ---
 
+## Sportsbook Expansion Design — PrizePicks + Hard Rock Bet (2026-07-06)
+
+Branch `claude/railway-feature-brainstorm-vwifyt` (based on `railway`). Design-only
+session — spec at `docs/superpowers/specs/2026-07-06-sportsbook-expansion-and-feature-brainstorm-design.md`,
+awaiting user approval before implementation.
+
+- **What/why:** User asked for feature brainstorm with priority on adding
+  PrizePicks and Hard Rock Bet lines. Hard Rock Bet turns out to be an
+  Odds API config change (`regions: us,us2`, key `hardrockbet`); PrizePicks
+  needs a new fail-soft fetcher against its unofficial projections endpoint
+  plus pick'em breakeven math (no over/under odds — payout-multiplier model).
+- **Files modified:** design doc (new), `TODO.md`, `CHANGELOG.md`. No code.
+- **Status:** Spec complete with 4 open questions for user; suggested phasing
+  is 5 slices (Hard Rock config → PrizePicks fetcher + value board → line
+  snapshots → best-line view + accuracy scoreboard → alerting/optimizer).
+- **Discovered:** `upsert_betting_lines` overwrites prior lines on re-fetch, so
+  line-movement history is being lost daily — this blocks Phase 8 CLV tracking
+  until a snapshot table exists. Flagged as slice 3 (possibly ride with slice 1).
+
+---
+
 ## Security Audit — High-Priority Fixes (2026-07-06)
 
 Branch `claude/repo-security-audit-ljdr3d` (PR into `railway`). Implements the
