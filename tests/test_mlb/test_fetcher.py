@@ -357,6 +357,24 @@ class TestIngestDate:
         count = await ingest_mlb_schedule(session, date(2024, 6, 1), date(2024, 6, 1))
         assert count == 1  # only the well-formed game
 
+    async def test_duplicate_gamepk_deduped(self, session, fake_api):
+        """A gamePk echoed twice in one payload upserts once, not a crash.
+
+        The MLB schedule endpoint can repeat a gamePk (suspended/resumed
+        games, or a leg listed across date entries). Two rows sharing the
+        game_pk conflict key in one statement makes Postgres raise
+        "ON CONFLICT DO UPDATE command cannot affect row a second time".
+        """
+        payload = _load("schedule_single.json")
+        echoed_day = json.loads(json.dumps(payload["dates"][0]))  # same gamePk
+        payload["dates"].append(echoed_day)
+        fake_api.routes["teams"] = _load("teams.json")
+        fake_api.routes["schedule"] = payload
+
+        await ingest_mlb_teams(session, 2024)
+        count = await ingest_mlb_schedule(session, date(2024, 6, 1), date(2024, 6, 1))
+        assert count == 1  # the duplicate collapsed to a single upsert
+
     async def test_non_final_games_skipped(self, session, fake_api):
         payload = _load("schedule_single.json")
         payload["dates"][0]["games"][0]["status"]["detailedState"] = "In Progress"
