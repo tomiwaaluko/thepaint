@@ -75,9 +75,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         try:
             redis = _get_redis()
+            # Create the key with its TTL before incrementing so a failure
+            # between the two calls can never leave a counter without expiry.
+            await redis.set(key, 0, ex=90, nx=True)
             count = await redis.incr(key)
-            if count == 1:
-                await redis.expire(key, 60)
         except Exception as e:
             # Fail open — rate limiting must never take the API down.
             log.warning("rate_limit_check_failed", error=str(e))

@@ -32,8 +32,9 @@ class TestComputeFantasyScore:
         stats_no_dd = dict(stats)
         stats_no_dd["pts"] = 9.0  # only reb >= 10 now
         score_one_dd = compute_fantasy_score(stats_no_dd, "draftkings")
-        # With double-double, score should be higher by 1.5 + pts diff
-        assert score > score_one_dd
+        # Exact delta: 11 raw pts (x1.0 DK multiplier) + 1.5 DD bonus.
+        # Fails if the double-double bonus is removed (delta would be 11.0).
+        assert abs((score - score_one_dd) - (11.0 + 1.5)) < 0.01
 
     def test_draftkings_triple_double_bonus(self):
         stats = {"pts": 15.0, "reb": 12.0, "ast": 10.0, "stl": 1.0, "blk": 0.5,

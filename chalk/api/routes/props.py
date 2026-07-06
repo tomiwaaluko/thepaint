@@ -1,4 +1,5 @@
 """Player props routes — over/under probabilities vs. Vegas lines."""
+import json
 from datetime import date
 
 import redis.asyncio as aioredis
@@ -40,16 +41,17 @@ async def player_props(
     invalid = [s for s in stats if s not in ALLOWED_STATS]
     if invalid:
         raise HTTPException(status_code=422, detail=f"Invalid stats: {invalid}. Allowed: {sorted(ALLOWED_STATS)}")
-    cache_key = f"props:player:{player_id}:game:{game_id}"
+    # Include the stat selection in the key so different ?stats= requests
+    # don't serve each other's cached responses.
+    cache_key = f"props:player:{player_id}:game:{game_id}:stats:{','.join(sorted(stats))}"
     # Cached value is a JSON list, not a single Pydantic model — deserialize manually
     try:
         raw = await redis.get(cache_key)
         if raw:
-            import json
             data = json.loads(raw)
             return [OverUnderResponse(**item) for item in data]
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("props_cache_read_failed", cache_key=cache_key, error=str(e))
 
     as_of_date = date.today()
 
@@ -110,9 +112,8 @@ async def player_props(
 
     # Cache response
     try:
-        import json
         await redis.setex(cache_key, 900, json.dumps([r.model_dump() for r in responses]))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("props_cache_write_failed", cache_key=cache_key, error=str(e))
 
     return responses

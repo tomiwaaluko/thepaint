@@ -16,12 +16,15 @@ class FakeRedisCounter:
     def __init__(self):
         self.counts: dict[str, int] = {}
 
+    async def set(self, key: str, value: int, ex: int | None = None, nx: bool = False) -> bool | None:
+        if nx and key in self.counts:
+            return None
+        self.counts[key] = int(value)
+        return True
+
     async def incr(self, key: str) -> int:
         self.counts[key] = self.counts.get(key, 0) + 1
         return self.counts[key]
-
-    async def expire(self, key: str, ttl: int) -> bool:
-        return True
 
 
 def _mock_db_empty():
