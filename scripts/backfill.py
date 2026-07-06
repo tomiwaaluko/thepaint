@@ -9,10 +9,7 @@ from pathlib import Path
 
 import structlog
 from nba_api.stats.static import players as nba_players
-from sqlalchemy import select, func
 
-from chalk.config import settings
-from chalk.db.models import PlayerGameLog
 from chalk.db.session import async_session_factory
 from chalk.exceptions import IngestError
 from chalk.ingestion.nba_fetcher import ingest_player_season, ingest_team_season

@@ -1,19 +1,15 @@
 """Tests for Steps 1-5: scaffold, config, exceptions, session, ORM models."""
-from datetime import date, datetime
+from datetime import date
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy import UniqueConstraint
 
 from chalk.config import Settings
 from chalk.db.models import (
     Base,
-    BettingLine,
     Game,
-    Injury,
     Player,
     PlayerGameLog,
-    Prediction,
     Team,
     TeamGameLog,
 )

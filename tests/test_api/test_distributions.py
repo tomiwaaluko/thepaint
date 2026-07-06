@@ -1,5 +1,4 @@
 """Tests for the distribution builder."""
-import pytest
 
 from chalk.predictions.distributions import (
     build_stat_prediction,

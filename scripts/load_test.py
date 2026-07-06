@@ -39,7 +39,7 @@ async def main():
         await asyncio.gather(*tasks)
 
     # Compute stats
-    latencies_ms = [l * 1000 for l in latencies]
+    latencies_ms = [lat * 1000 for lat in latencies]
     latencies_ms.sort()
 
     p50 = latencies_ms[len(latencies_ms) // 2]

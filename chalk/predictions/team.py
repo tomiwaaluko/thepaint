@@ -97,10 +97,10 @@ async def _build_team_features(
                 for col in ["pts", "pace", "off_rtg", "def_rtg"]:
                     features[f"{prefix}_{col}_avg_{window}g"] = 0.0
                 continue
-            features[f"{prefix}_pts_avg_{window}g"] = sum(l.pts for l in subset) / len(subset)
-            features[f"{prefix}_pace_avg_{window}g"] = sum(l.pace for l in subset) / len(subset)
-            features[f"{prefix}_off_rtg_avg_{window}g"] = sum(l.off_rtg for l in subset) / len(subset)
-            features[f"{prefix}_def_rtg_avg_{window}g"] = sum(l.def_rtg for l in subset) / len(subset)
+            features[f"{prefix}_pts_avg_{window}g"] = sum(log.pts for log in subset) / len(subset)
+            features[f"{prefix}_pace_avg_{window}g"] = sum(log.pace for log in subset) / len(subset)
+            features[f"{prefix}_off_rtg_avg_{window}g"] = sum(log.off_rtg for log in subset) / len(subset)
+            features[f"{prefix}_def_rtg_avg_{window}g"] = sum(log.def_rtg for log in subset) / len(subset)
 
     features["is_home"] = 1.0 if is_home else 0.0
     return features

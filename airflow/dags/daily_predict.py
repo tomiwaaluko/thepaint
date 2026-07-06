@@ -210,7 +210,7 @@ def validate_predictions(**context):
 
             if errors:
                 raise AirflowException(
-                    f"Prediction validation failed:\n" + "\n".join(errors)
+                    "Prediction validation failed:\n" + "\n".join(errors)
                 )
 
             print(f"Validated {len(preds)} predictions — all passed")

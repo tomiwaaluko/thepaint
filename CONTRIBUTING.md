@@ -10,10 +10,11 @@ Thanks for your interest in contributing.
 
 ## Development Setup
 
-1. Install backend dependencies:
+1. Install backend dependencies (pinned via the lockfiles):
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
+pip install --no-deps -e .
 ```
 
 2. Create environment file:
@@ -54,6 +55,7 @@ npm run dev
 Before opening a PR, run:
 
 ```bash
+ruff check .
 pytest tests/ -v
 ```
 
@@ -64,6 +66,27 @@ cd dashboard
 npm run lint
 npm run build
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same checks on every PR into
+`railway` and `main` — PRs must be green before merge.
+
+## Updating Dependencies
+
+Dependency versions are declared as ranges in `pyproject.toml` and pinned in
+`requirements.txt` (production) and `requirements-dev.txt` (dev/CI). The
+Docker image installs only from `requirements.txt`. To upgrade or add a
+dependency:
+
+```bash
+# Edit pyproject.toml first, then regenerate both lockfiles:
+uv pip compile pyproject.toml -o requirements.txt --python-version 3.11
+uv pip compile pyproject.toml --extra dev -o requirements-dev.txt --python-version 3.11
+```
+
+Commit `pyproject.toml` and both lockfiles together. Be careful with
+`xgboost`, `lightgbm`, and `scikit-learn` — the committed `models/*.joblib`
+artifacts must still load under the new versions (start the API and check
+for `model_load_failed` warnings).
 
 ## Coding Standards
 

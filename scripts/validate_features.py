@@ -16,7 +16,7 @@ log = structlog.get_logger()
 
 async def validate(player_id: int, game_id: str, as_of_date: date) -> None:
     async with async_session_factory() as session:
-        print(f"\n=== Feature Validation ===")
+        print("\n=== Feature Validation ===")
         print(f"Player: {player_id}  Game: {game_id}  as_of_date: {as_of_date}")
 
         features = await generate_features(session, player_id, game_id, as_of_date)
@@ -31,7 +31,7 @@ async def validate(player_id: int, game_id: str, as_of_date: date) -> None:
         print(f"Null values: {nulls}")
 
         # Print all features sorted
-        print(f"\n--- All Features ---")
+        print("\n--- All Features ---")
         for k in sorted(features.keys()):
             print(f"  {k:40s} = {features[k]:.4f}")
 

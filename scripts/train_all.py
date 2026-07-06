@@ -8,15 +8,13 @@ import argparse
 import asyncio
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from chalk.db.models import Game, Player, PlayerGameLog, TeamGameLog
 from chalk.db.session import async_session_factory
-from chalk.models.base import MAE_TARGETS
-from chalk.models.player import PLAYER_STATS, train_player_stat_model
+from chalk.models.player import train_player_stat_model
 from chalk.models.quantile import QUANTILE_STATS, train_quantile_models
 from chalk.models.registry import save_model, save_quantile_model
 from chalk.models.team import train_team_total_model
@@ -61,22 +59,22 @@ async def build_master_player_matrix(session, min_games: int = 100) -> pd.DataFr
 
     # Build base dataframe
     rows = []
-    for l in logs:
-        game = games.get(l.game_id)
-        player = players.get(l.player_id)
+    for gl in logs:
+        game = games.get(gl.game_id)
+        player = players.get(gl.player_id)
         if not game or not player:
             continue
-        is_home = game.home_team_id == l.team_id
+        is_home = game.home_team_id == gl.team_id
         opp_team_id = game.away_team_id if is_home else game.home_team_id
         rows.append({
-            "player_id": l.player_id, "game_id": l.game_id,
-            "game_date": pd.Timestamp(l.game_date), "season": l.season,
-            "team_id": l.team_id, "opp_team_id": opp_team_id,
+            "player_id": gl.player_id, "game_id": gl.game_id,
+            "game_date": pd.Timestamp(gl.game_date), "season": gl.season,
+            "team_id": gl.team_id, "opp_team_id": opp_team_id,
             "is_home": int(is_home),
-            "min_played": l.min_played, "pts": l.pts, "reb": l.reb, "ast": l.ast,
-            "stl": l.stl, "blk": l.blk, "to_committed": l.to_committed,
-            "fg3m": l.fg3m, "fg3a": l.fg3a, "fgm": l.fgm, "fga": l.fga,
-            "ftm": l.ftm, "fta": l.fta, "plus_minus": l.plus_minus,
+            "min_played": gl.min_played, "pts": gl.pts, "reb": gl.reb, "ast": gl.ast,
+            "stl": gl.stl, "blk": gl.blk, "to_committed": gl.to_committed,
+            "fg3m": gl.fg3m, "fg3a": gl.fg3a, "fgm": gl.fgm, "fga": gl.fga,
+            "ftm": gl.ftm, "fta": gl.fta, "plus_minus": gl.plus_minus,
         })
     df = pd.DataFrame(rows).sort_values(["player_id", "game_date"]).reset_index(drop=True)
 

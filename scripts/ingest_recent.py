@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 import structlog
 from nba_api.stats.static import players as nba_players
-from sqlalchemy import select, text
+from sqlalchemy import text
 
 from chalk.db.session import async_session_factory
 from chalk.ingestion.nba_fetcher import ingest_player_season, ingest_team_season
@@ -32,7 +32,7 @@ async def main():
         await seed_teams(session)
 
         # 1. Team game logs (gets all games + scores for the full season)
-        print(f"\n[1/2] Team game logs...")
+        print("\n[1/2] Team game logs...")
         try:
             count = await ingest_team_season(session, CURRENT_SEASON)
             print(f"  Upserted {count} team game log rows")
@@ -80,7 +80,7 @@ async def main():
             print(f"  {row[1]}  {row[2]} vs {row[3]}  game_id={row[0]}  ({row[4]} player logs)")
 
         if rows:
-            print(f"\nUpdate DEMO_GAME_IDS in dashboard/src/App.tsx to:")
+            print("\nUpdate DEMO_GAME_IDS in dashboard/src/App.tsx to:")
             ids = [row[0] for row in rows[:3]]
             print(f'  const DEMO_GAME_IDS = {json.dumps(ids)};')
 

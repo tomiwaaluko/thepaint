@@ -1,5 +1,4 @@
 """Tests for over/under probability module."""
-import pytest
 
 from chalk.betting.over_under import (
     american_to_implied_probability,

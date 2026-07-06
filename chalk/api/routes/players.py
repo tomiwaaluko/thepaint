@@ -1,5 +1,5 @@
 """Player prediction routes."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -37,11 +37,14 @@ async def predict_player_statline(
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> PlayerPredictionResponse:
-    # Check cache
-    cache_key = f"pred:player:{player_id}:game:{game_id}"
     as_of_date = as_of.date() if as_of else date.today()
     if as_of_date > date.today():
         raise HTTPException(status_code=400, detail="as_of date cannot be in the future")
+
+    # Key includes as_of_date: predictions vary by it, so different dates must
+    # not share a cache entry. Still matches the pred:player:{id}:* invalidation
+    # pattern used by invalidate_player_predictions.
+    cache_key = f"pred:player:{player_id}:game:{game_id}:asof:{as_of_date.isoformat()}"
 
     cached = await get_cached(redis, cache_key, PlayerPredictionResponse)
     if cached:

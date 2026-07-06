@@ -9,7 +9,19 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from chalk.config import settings
 from chalk.db.models import Base
+
+
+@pytest.fixture(autouse=True)
+def _disable_rate_limiting(monkeypatch):
+    """Keep the rate limiter out of unrelated tests.
+
+    Without this, running the suite on a machine with a live local Redis
+    would share one fixed-window counter across every API test and fail
+    randomly. Rate-limit tests re-enable it explicitly.
+    """
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
 
 
 @pytest.fixture(scope="session")

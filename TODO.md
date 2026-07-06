@@ -11,7 +11,44 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 **Active Phase:** Phase 9 - AI Injury Agent
 **Current Task:** ESPN/Gemini injury ingestion pipeline and dashboard injury status defaults
-**Last Updated:** Session 10
+**Last Updated:** Session 11
+
+---
+
+## Security Audit — High-Priority Fixes (2026-07-06)
+
+Branch `claude/repo-security-audit-ljdr3d` (PR into `railway`). Implements the
+three High tickets from the Linear security audit (CHA-5, CHA-6, CHA-7).
+
+- **CHA-6 (CI):** New `.github/workflows/ci.yml` — backend job (ruff check +
+  pytest on the pinned dev lockfile) and dashboard job (npm ci + lint +
+  build) on every PR/push to `railway`/`main`. Added `[tool.ruff]` config to
+  `pyproject.toml` (default E/F rules, py311) and fixed all 86 pre-existing
+  lint errors (unused imports, ambiguous `l` names, `== True` SQLAlchemy
+  comparisons, one real dead-code find in `props.py`, one eslint error in
+  `dashboard/src/main.tsx`).
+- **CHA-7 (supply chain):** Pinned lockfiles `requirements.txt` (prod) +
+  `requirements-dev.txt` (dev/CI) generated via `uv pip compile`. Dockerfile
+  now installs from the lockfile, pins base image `python:3.11.15-slim`, and
+  runs as non-root user `chalk`. Verified all 18 committed model artifacts
+  load under the pinned versions and that the prod lockfile alone supports
+  the API (import + model load + uvicorn).
+- **CHA-5 (abuse protection):** New `chalk/api/ratelimit.py` — Redis-backed
+  fixed-window per-IP rate limiting (120/min default, 30/min for
+  /predict|/props|/fantasy, fail-open on Redis errors, /v1/health exempt).
+  `nocache=true` on `GET /v1/games/{id}/predict` now requires a valid
+  `X-Invalidation-Token` (constant-time compare, shared with the DELETE
+  cache route). `/v1/games/today` auto-ingest is guarded by a 30s Redis
+  NX lock so concurrent cache misses can't stampede the NBA API.
+- **Files:** `.github/workflows/ci.yml`, `pyproject.toml`, `requirements*.txt`,
+  `Dockerfile`, `chalk/api/{ratelimit,main,config}.py`,
+  `chalk/api/routes/games.py`, `tests/test_api/test_ratelimit.py`,
+  `tests/conftest.py` (autouse rate-limit disable), `.env.example`,
+  `README.md`, `CONTRIBUTING.md`, plus mechanical lint fixes across 38 files.
+- **Status:** 318 tests passing (baseline 309 + 9 new); ruff clean;
+  dashboard lint + build clean. Deferred: `ruff format` normalization
+  (104 files — separate mechanical PR), Docker build itself unverifiable in
+  the dev sandbox (no daemon) — Railway build on deploy is the check.
 
 ---
 

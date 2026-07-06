@@ -1,7 +1,6 @@
 """Tests for Optuna hyperparameter tuning."""
 import numpy as np
 import pandas as pd
-import pytest
 
 from chalk.models.tuning import tune_stat
 

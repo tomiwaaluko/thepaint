@@ -1,11 +1,9 @@
 """Tests for API Pydantic schemas."""
 from datetime import datetime, timezone
 
-import pytest
 
 from chalk.api.schemas import (
     FantasyScores,
-    GamePredictionResponse,
     HealthResponse,
     InjuryContext,
     OverUnderResponse,

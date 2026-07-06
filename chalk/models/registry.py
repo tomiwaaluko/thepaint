@@ -51,7 +51,6 @@ def save_model(model: BaseStatModel) -> Path:
 
 def save_lgbm_model(model) -> Path:
     """Save a trained LightGBM model to disk."""
-    from chalk.models.lgbm import LGBMStatModel
     path = _lgbm_path(model.stat)
     model.save(path)
     log.info("lgbm_model_saved", stat=model.stat, path=str(path))
@@ -60,7 +59,6 @@ def save_lgbm_model(model) -> Path:
 
 def save_ensemble_model(model) -> Path:
     """Save a trained stacked ensemble to disk."""
-    from chalk.models.ensemble import StackedEnsemble
     path = _ensemble_path(model.stat)
     model.save(path)
     log.info("ensemble_model_saved", stat=model.stat, path=str(path))

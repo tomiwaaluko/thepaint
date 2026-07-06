@@ -69,8 +69,12 @@ models/              # serialized model artifacts
 
 ### 2) Clone and install backend dependencies
 
+Dependencies are pinned in lockfiles (`requirements.txt` for production,
+`requirements-dev.txt` for development):
+
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
+pip install --no-deps -e .
 ```
 
 ### 3) Configure environment
@@ -122,9 +126,10 @@ docker compose up
 
 ## Testing
 
-Run all backend tests:
+Run backend lint and tests (CI runs the same checks on every PR):
 
 ```bash
+ruff check .
 pytest tests/ -v
 ```
 

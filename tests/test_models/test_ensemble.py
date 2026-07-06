@@ -1,7 +1,6 @@
 """Tests for StackedEnsemble."""
 import numpy as np
 import pandas as pd
-import pytest
 
 from chalk.models.base import DEFAULT_XGB_PARAMS
 from chalk.models.ensemble import StackedEnsemble
