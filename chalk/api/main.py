@@ -8,6 +8,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from chalk.api.ratelimit import RateLimitMiddleware
 from chalk.api.routes import fantasy, games, health, players, props, teams
 from chalk.config import settings
 from chalk.exceptions import FeatureError, IngestError, PredictionError
@@ -49,6 +50,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# Innermost first: rate limiting runs inside the security/CORS layers so 429
+# responses still carry security and CORS headers.
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(

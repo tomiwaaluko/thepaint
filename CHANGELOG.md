@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-06 — Security audit: CI, dependency pinning, API abuse protection
+
+### Done
+- Full repo security/quality audit → 11 Linear tickets (CHA-5…CHA-15); implemented the three High-priority ones on `claude/repo-security-audit-ljdr3d`.
+- **CI (CHA-6):** `.github/workflows/ci.yml` runs ruff + pytest (backend) and npm lint + build (dashboard) on every PR/push to `railway`/`main`; added `[tool.ruff]` config; fixed all 86 existing lint errors incl. dead cache-read in `props.py` and an eslint error in `dashboard/src/main.tsx`.
+- **Dependency pinning (CHA-7):** committed `requirements.txt`/`requirements-dev.txt` lockfiles (uv pip compile); Dockerfile installs from the lockfile, pins `python:3.11.15-slim`, runs as non-root.
+- **Abuse protection (CHA-5):** per-IP Redis rate limiting middleware (fail-open, health/docs exempt, stricter limit on inference routes); `nocache` cache bypass now requires the invalidation token (constant-time compare); Redis NX lock prevents `/v1/games/today` auto-ingest stampedes.
+
+### Metrics
+- Tests: 318 passed (309 baseline + 9 new rate-limit/nocache tests); ruff: 0 errors; dashboard lint/build: clean.
+- All 18 committed model artifacts verified to load under the pinned dependency set; prod lockfile alone boots the API.
+
+### Pending
+- `ruff format` normalization deferred (would touch 104 files — separate mechanical PR).
+- Docker image build not verifiable in the dev sandbox (no daemon); Railway deploy build is the verification.
+- Remaining audit tickets CHA-8…CHA-15 (Medium/Low) unstarted.
+
+### Next
+- Merge PR into `railway` after CodeRabbit review; then pick up CHA-8 (error-response hardening) and CHA-9 (shared Redis pool) which touch the same files while context is fresh.
+
 ## 2026-07-05 (later) — MLB slice 1 merged & deployed
 ### Done
 - Merged PR #28 (`feature/mlb-expansion` → `railway`, merge `c94b73b`).

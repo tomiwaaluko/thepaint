@@ -15,9 +15,16 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed CORS origins.
     # Override in production via ALLOWED_ORIGINS env var.
     ALLOWED_ORIGINS: str = "https://thepaint-production.up.railway.app,http://localhost:5173"
-    # Optional token required to call DELETE /games/{id}/cache.
-    # Leave unset to disable the endpoint entirely.
+    # Optional token required to call DELETE /games/{id}/cache and to use the
+    # nocache query param on prediction endpoints. Leave unset to disable both.
     CACHE_INVALIDATION_TOKEN: str = ""
+    # Per-client (IP) rate limiting. Counters live in Redis; the limiter fails
+    # open if Redis is unavailable.
+    RATE_LIMIT_ENABLED: bool = True
+    # Requests per minute for general endpoints.
+    RATE_LIMIT_PER_MINUTE: int = 120
+    # Requests per minute for model-inference endpoints (/predict, /props, /fantasy).
+    RATE_LIMIT_PREDICT_PER_MINUTE: int = 30
     # Optional HTTP proxy URL for outbound NBA API requests.
     # Use this when Railway datacenter IPs are blocked by stats.nba.com.
     # Format: "http://user:pass@host:port" or "http://host:port"

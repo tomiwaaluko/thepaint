@@ -1,5 +1,5 @@
 """Game prediction routes."""
-import asyncio
+import secrets
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -20,7 +20,6 @@ from chalk.api.schemas import (
 )
 from chalk.config import settings
 from chalk.db.models import Game, Player, PlayerGameLog, Team
-from chalk.exceptions import PredictionError
 from chalk.ingestion.nba_fetcher import ingest_today_scoreboard
 from chalk.predictions.player import predict_player
 
@@ -55,17 +54,24 @@ async def get_today_games(
     )
     today_games = result.scalars().all()
 
-    # If no games for today in DB, try fetching from NBA API
+    # If no games for today in DB, try fetching from NBA API. A short Redis
+    # lock ensures concurrent cache misses trigger at most one outbound fetch
+    # instead of stampeding the NBA API.
     if not today_games:
         try:
-            count = await ingest_today_scoreboard(session, today)
-            if count > 0:
-                result = await session.execute(
-                    select(Game).where(Game.date == today).order_by(Game.game_id)
-                )
-                today_games = result.scalars().all()
-        except Exception as e:
-            log.warning("auto_ingest_today_failed", error=str(e))
+            lock_acquired = await redis.set(f"lock:ingest:today:{today}", "1", nx=True, ex=30)
+        except Exception:
+            lock_acquired = True  # Redis down — fall through to a single direct attempt
+        if lock_acquired:
+            try:
+                count = await ingest_today_scoreboard(session, today)
+                if count > 0:
+                    result = await session.execute(
+                        select(Game).where(Game.date == today).order_by(Game.game_id)
+                    )
+                    today_games = result.scalars().all()
+            except Exception as e:
+                log.warning("auto_ingest_today_failed", error=str(e))
 
     result = await session.execute(
         select(Game).where(Game.date == tomorrow).order_by(Game.game_id)
@@ -105,6 +111,18 @@ async def get_today_games(
     return response
 
 
+def _invalidation_token_valid(provided: str | None) -> bool:
+    """Constant-time check of the cache-invalidation token.
+
+    Returns False when no token is configured — cache invalidation is
+    disabled entirely in that case.
+    """
+    token = settings.CACHE_INVALIDATION_TOKEN
+    if not token:
+        return False
+    return secrets.compare_digest(provided or "", token)
+
+
 @router.delete("/{game_id}/cache")
 async def clear_game_cache(
     game_id: str,
@@ -112,8 +130,7 @@ async def clear_game_cache(
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
     """Clear cached prediction for a game. Requires X-Invalidation-Token header."""
-    token = settings.CACHE_INVALIDATION_TOKEN
-    if not token or x_invalidation_token != token:
+    if not _invalidation_token_valid(x_invalidation_token):
         raise HTTPException(status_code=403, detail="Invalid or missing invalidation token")
     deleted = await redis.delete(f"pred:game:{game_id}")
     return {"game_id": game_id, "cleared": deleted > 0}
@@ -123,12 +140,24 @@ async def clear_game_cache(
 async def predict_game(
     game_id: str = Path(..., pattern=GAME_ID_PATTERN, description="NBA or ESPN game ID"),
     as_of: datetime | None = Query(None, description="Prediction as-of datetime"),
-    nocache: bool = Query(False, description="Skip cache lookup"),
+    nocache: bool = Query(
+        False,
+        description="Skip cache lookup. Requires a valid X-Invalidation-Token header.",
+    ),
+    x_invalidation_token: str | None = Header(None, alias="X-Invalidation-Token"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> GamePredictionResponse:
     cache_key = f"pred:game:{game_id}"
     if nocache:
+        # Cache bypass forces a full recompute (feature generation + model
+        # inference for every player) — gate it behind the invalidation token
+        # so anonymous callers can't evict the cache or burn CPU at will.
+        if not _invalidation_token_valid(x_invalidation_token):
+            raise HTTPException(
+                status_code=403,
+                detail="nocache requires a valid X-Invalidation-Token header",
+            )
         await redis.delete(cache_key)
     else:
         cached = await get_cached(redis, cache_key, GamePredictionResponse)
