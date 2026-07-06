@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     ODDS_API_KEY: str = ""
     gemini_api_key: str | None = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"
     LOG_LEVEL: str = "INFO"
     NBA_API_CACHE_DIR: Path = Path(".cache/nba_api")
@@ -25,6 +26,12 @@ class Settings(BaseSettings):
     NBA_API_TIMEOUT: int = 30
     # nba_api max retry attempts before permanent failure (default 3).
     NBA_API_MAX_RETRIES: int = 3
+    # When true, missing player logs for a day with games make the ingest cron exit non-zero.
+    INGEST_STRICT_VALIDATION: bool = False
+    # MLB StatsAPI (statsapi.mlb.com) — keyless public API.
+    MLB_API_CACHE_DIR: Path = Path(".cache/mlb_api")
+    MLB_API_TIMEOUT: int = 30
+    MLB_API_MAX_RETRIES: int = 5
 
     model_config = {"env_file": ".env"}
 

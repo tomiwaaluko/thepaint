@@ -1,0 +1,78 @@
+name: Branch Guard
+
+# Enforces the Chalk Dev Flow golden branch rule (see .claude/README.md):
+#   - All work branches off `railway` and PRs target `railway`.
+#   - Branch names use an approved `<prefix>/` from the naming convention.
+#   - `main` only ever receives the deliberate `railway -> main` promotion
+#     (from `railway` itself or a `release/*` branch cutting the release).
+
+on:
+  pull_request:
+    # `edited` catches a PR being retargeted to a different base branch.
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce branch naming and base rules
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          echo "Pull request: '$HEAD' -> '$BASE'"
+
+          # Approved human prefixes — keep in sync with .claude/README.md's table.
+          ALLOWED='feature bugfix hotfix chore docs refactor test style perf ci build release experiment'
+          # Automation prefixes — agent/bot branches (e.g. Claude Code) that tooling
+          # creates and cannot rename. Allowed into railway alongside the human set.
+          AUTOMATION='claude dependabot renovate'
+
+          fail() {
+            echo "::error::$1"
+            echo ""
+            echo "Golden branch rule: branch off 'railway', PR into 'railway',"
+            echo "and use an approved '<prefix>/' name. 'main' only changes via the"
+            echo "deliberate 'railway -> main' promotion in /chalk-release."
+            echo "Details: .claude/README.md"
+            exit 1
+          }
+
+          is_release_branch() { case "$1" in release/*) return 0 ;; *) return 1 ;; esac; }
+
+          case "$BASE" in
+            main)
+              # main is the release line: only railway or a release/* branch may merge in.
+              if [ "$HEAD" = "railway" ] || is_release_branch "$HEAD"; then
+                echo "OK: promotion into 'main' from '$HEAD'."
+              else
+                fail "PRs into 'main' are only allowed from 'railway' or a 'release/*' branch (got '$HEAD'). Retarget this PR to 'railway'."
+              fi
+              ;;
+            railway)
+              # Must have a "<prefix>/..." shape.
+              if [ "$HEAD" = "${HEAD%%/*}" ]; then
+                fail "Branch '$HEAD' has no '<prefix>/' segment. Rename it using one of: $ALLOWED."
+              fi
+              PREFIX="${HEAD%%/*}"
+              MATCH=false
+              for p in $ALLOWED; do
+                if [ "$PREFIX" = "$p" ]; then MATCH=true; break; fi
+              done
+              for p in $AUTOMATION; do
+                if [ "$PREFIX" = "$p" ]; then MATCH=true; break; fi
+              done
+              if [ "$MATCH" = "true" ]; then
+                echo "OK: '$HEAD' targets 'railway' with allowed prefix '$PREFIX/'."
+              else
+                fail "Branch prefix '$PREFIX/' is not approved. Use one of: $ALLOWED (or an automation prefix: $AUTOMATION)."
+              fi
+              ;;
+            *)
+              echo "OK: base '$BASE' is not a protected branch; no guard applied."
+              ;;
+          esac

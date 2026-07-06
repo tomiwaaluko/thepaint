@@ -1,6 +1,7 @@
 """Seed reference data (teams, players) into the database."""
 import structlog
 from nba_api.stats.static import teams as nba_teams
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,18 +105,73 @@ async def upsert_player(session: AsyncSession, player_id: int, name: str, team_i
 async def upsert_games(session: AsyncSession, game_rows: list[dict]) -> None:
     """Upsert game records. Each dict needs: game_id, date, season, home_team_id, away_team_id.
 
-    Optional key ``is_playoffs`` (bool) will be updated on conflict so that
-    games initially seeded as regular-season can be corrected later.
+    On conflict the following fields are refreshed: date, season, home_team_id,
+    away_team_id, is_playoffs. ``status`` is preserved via COALESCE so that a
+    re-ingest from season logs (which omit status) never overwrites a "final"
+    status set by the scoreboard ingest.
     """
     if not game_rows:
         return
-    stmt = pg_insert(Game).values(game_rows)
+    filtered_rows = []
+    seen_matchups: set[tuple] = set()
+    for row in game_rows:
+        if not row["home_team_id"] or not row["away_team_id"]:
+            log.warning(
+                "game_invalid_team_ids_skipped",
+                incoming_game_id=row["game_id"],
+                date=str(row["date"]),
+                home_team_id=row["home_team_id"],
+                away_team_id=row["away_team_id"],
+            )
+            continue
+
+        matchup_key = (row["date"], row["home_team_id"], row["away_team_id"])
+        if matchup_key in seen_matchups:
+            log.info(
+                "game_matchup_batch_duplicate_skipped",
+                incoming_game_id=row["game_id"],
+                date=str(row["date"]),
+                home_team_id=row["home_team_id"],
+                away_team_id=row["away_team_id"],
+            )
+            continue
+
+        existing_result = await session.execute(
+            select(Game.game_id)
+            .where(Game.date == row["date"])
+            .where(Game.home_team_id == row["home_team_id"])
+            .where(Game.away_team_id == row["away_team_id"])
+            .limit(1)
+        )
+        existing_game_id = existing_result.scalar_one_or_none()
+        if existing_game_id and existing_game_id != row["game_id"]:
+            log.info(
+                "game_matchup_duplicate_skipped",
+                existing_game_id=existing_game_id,
+                incoming_game_id=row["game_id"],
+                date=str(row["date"]),
+                home_team_id=row["home_team_id"],
+                away_team_id=row["away_team_id"],
+            )
+            continue
+        seen_matchups.add(matchup_key)
+        filtered_rows.append(row)
+
+    if not filtered_rows:
+        return
+
+    stmt = pg_insert(Game).values(filtered_rows)
     stmt = stmt.on_conflict_do_update(
         index_elements=["game_id"],
         set_={
+            "date": stmt.excluded.date,
+            "season": stmt.excluded.season,
             "home_team_id": stmt.excluded.home_team_id,
             "away_team_id": stmt.excluded.away_team_id,
             "is_playoffs": stmt.excluded.is_playoffs,
+            # Preserve a meaningful status (e.g. "final") when the incoming row
+            # does not supply one (EXCLUDED.status would be NULL from season logs).
+            "status": func.coalesce(stmt.excluded.status, Game.__table__.c.status),
         },
     )
     await session.execute(stmt)

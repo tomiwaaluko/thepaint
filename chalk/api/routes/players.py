@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.api.cache import get_cached, set_cached
 from chalk.api.dependencies import get_db, get_redis
-from chalk.api.schemas import PlayerPredictionResponse
+from chalk.api.schemas import GAME_ID_PATTERN, PlayerPredictionResponse
 from chalk.db.models import Player, PlayerGameLog
 from chalk.exceptions import FeatureError, PredictionError
 from chalk.ingestion.injury_fetcher import get_player_status
@@ -32,7 +32,7 @@ async def _with_latest_injury_status(
 @router.get("/{player_id}/predict", response_model=PlayerPredictionResponse)
 async def predict_player_statline(
     player_id: int = Path(..., gt=0, description="Player ID"),
-    game_id: str = Query(..., description="NBA game ID", pattern=r"^[0-9]{10}$"),
+    game_id: str = Query(..., description="NBA or ESPN game ID", pattern=GAME_ID_PATTERN),
     as_of: datetime | None = Query(None, description="Prediction as-of datetime (default: now)"),
     session: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),

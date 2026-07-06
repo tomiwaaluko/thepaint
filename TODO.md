@@ -15,6 +15,59 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ---
 
+## MLB Expansion — Slice 1: Data Foundation (2026-07-05)
+
+Branch `feature/mlb-expansion` (PR into `railway`). First slice of the second
+sport: additive `chalk/mlb/` package — **zero NBA behavior changed**.
+
+- **What & why:** MLB chosen over NFL (daily cadence matches the cron
+  architecture; 162-game samples; clean batter-vs-pitcher matchup unit).
+  Sliced delivery: data foundation first; features → models → API/betting/
+  fantasy as follow-up branches. Option A layout (core/nba/mlb packages) is
+  the agreed target; the NBA→`nba/` move is deferred to a `/chalk-refactor`
+  branch (additive-first decision).
+- **Files:** `chalk/mlb/{models,fetcher,validate}.py`, migration
+  `f6a7b8c9d0e1_add_mlb_tables`, `scripts/mlb_backfill.py`,
+  `scripts/mlb_ingest_daily.py`, `tests/test_mlb/` (5 fixture files, 58 tests
+  incl. scaffold), settings in `chalk/config.py` + `.env.example`, five specs
+  in `specs/feature-mlb-expansion/`.
+- **Status:** ✅ **merged (PR #28 → `railway`) and deployed.** Migration
+  `f6a7b8c9d0e1` applied to production Supabase (`ulzrnfpwmhkzmfiqvtns`); 5
+  `mlb_*` tables live with RLS enabled, `alembic_version` at `f6a7b8c9d0e1`, NBA
+  data untouched. 301 passed full suite; one pre-existing timezone flake in
+  `test_today_games_no_stale_fallback` unrelated to diff. Independent 8-angle +
+  CodeRabbit review done, all findings fixed. **Remaining operator step: run
+  `python scripts/mlb_backfill.py`** from an env that can reach statsapi.mlb.com
+  (the agent sandbox proxy blocks it; the DB is ready and empty).
+- **Deferred / discovered:** pitcher decision-flag verification on first live
+  ingest; `bats/throws/birth_date` enrichment; shared-helper extraction into
+  `core/` (with the refactor branch); NBA games-API timezone flake fix.
+
+---
+
+## Tooling — Chalk Dev Flow (2026-07-04)
+
+Agentic, self-correcting Git workflows under `.claude/`, Compound-Engineering-style.
+Not a product phase — a process scaffold you invoke per branch type.
+
+- **What & why:** run one slash command per branch type (e.g. `/chalk-feature`,
+  `/chalk-bugfix`) and it drives the whole loop — branch off `railway`, produce the five
+  specs, TDD the code, ship a PR into `railway` — looping back to an earlier phase when a
+  later one fails.
+- **Structure (Windsurf-style two layers):**
+  - `.claude/commands/chalk-*.md` (13) — self-contained branch-type orchestrators with
+    `## MCP Integration`, `## Resuming`, `## Steps` (loop-backs + loop caps).
+  - `.claude/skills/chalk-*/SKILL.md` (6) — phase building blocks: brainstorm, plan,
+    work, review, ship, compound.
+  - `.claude/templates/*.md` (5); `.claude/README.md`; `specs/` output dir.
+- **Rules baked in:** branch off `railway`, PR into `railway`, `main` only via the
+  `railway → main` promotion in `/chalk-release`; MCP-aware (uses connected servers);
+  Chalk non-negotiables (`as_of_date`, upsert, async, one-model-per-stat, walk-forward).
+- **Status:** complete and ready to dogfood. No application code changed.
+- **Deferred:** tune per-type steps/loop caps from real usage.
+
+---
+
 ## Session Kickoff Prompt
 
 Paste this at the start of every Claude Code session:

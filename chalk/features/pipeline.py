@@ -17,6 +17,7 @@ from chalk.features.situational import (
     get_situational_features,
 )
 from chalk.features.usage import get_usage_features
+from chalk.features.vegas import get_vegas_features
 
 log = structlog.get_logger()
 
@@ -69,13 +70,14 @@ async def generate_features(
     opponent = await get_all_opponent_features(session, opponent_team_id, player.position, as_of_date)
     roster = await get_roster_features(session, player_id, player.team_id, opponent_team_id, game_id, as_of_date)
     usage = await get_usage_features(session, player_id, as_of_date)
+    vegas = await get_vegas_features(session, player_id, game_id, as_of_date)
     prev_date = await get_previous_game_date(session, player_id, as_of_date)
     game_num = await get_game_number_in_season(session, player.team_id, game.season, as_of_date)
 
     # Situational is synchronous
     situational = get_situational_features(game, player, prev_date, game_num)
 
-    features = {**rolling, **opponent, **roster, **usage, **situational}
+    features = {**rolling, **opponent, **roster, **usage, **vegas, **situational}
 
     # Replace any None values with 0.0 and ensure all are float
     features = {k: float(v) if v is not None else 0.0 for k, v in features.items()}

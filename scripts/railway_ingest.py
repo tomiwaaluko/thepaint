@@ -8,7 +8,7 @@ Steps:
   2. ingest_yesterday_stats — ingest team + player box scores for yesterday's games
   3. seed_today_games       — create game records for today (needed by prediction cron)
   4. ingest_injuries        — refresh injury report
-  5. fetch_odds_lines       — stub (Odds API not yet wired)
+  5. fetch_odds_lines       — fetch Odds API game totals and player props
   6. validate_row_counts    — sanity check: logs exist for yesterday's games
 """
 import asyncio
@@ -20,22 +20,31 @@ import structlog
 log = structlog.get_logger()
 
 
+def _missing_player_logs_should_fail(strict_validation: bool) -> bool:
+    """Return whether validation should make the cron exit non-zero."""
+    return strict_validation
+
+
 async def main_async() -> bool:
     from sqlalchemy import func, select
 
+    from chalk.config import settings
     from chalk.db.models import Game, Player, PlayerGameLog
     from chalk.db.session import async_session_factory
     from chalk.ingestion.injury_fetcher import ingest_injuries
     from chalk.ingestion.nba_fetcher import (
         ingest_game_boxscores_cdn,
+        ingest_game_boxscores_espn,
         ingest_player_season,
         ingest_team_season,
         ingest_today_scoreboard,
     )
+    from chalk.ingestion.odds_fetcher import fetch_game_totals, fetch_player_props
 
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     today = datetime.now(timezone.utc).date()
     failed = False
+    strict_validation = settings.INGEST_STRICT_VALIDATION
 
     async def run_step(name, coro):
         nonlocal failed
@@ -89,16 +98,19 @@ async def main_async() -> bool:
         if team_stats_failed:
             async with async_session_factory() as session:
                 team_rows, player_rows = await ingest_game_boxscores_cdn(session, games)
+            if not player_rows:
+                async with async_session_factory() as session:
+                    team_rows, player_rows = await ingest_game_boxscores_espn(session, games)
             if player_rows:
                 log.info(
                     "yesterday_stats_done",
                     player_rows=player_rows,
                     team_rows=team_rows,
                     date=str(yesterday),
-                    source="nba_cdn_boxscore",
+                    source="fallback_boxscore",
                 )
                 return player_rows
-            log.warning("boxscore_cdn_no_rows", date=str(yesterday), games=len(games))
+            log.warning("boxscore_fallback_no_rows", date=str(yesterday), games=len(games))
             return 0
 
         player_count = 0
@@ -150,6 +162,12 @@ async def main_async() -> bool:
                             session,
                             games,
                         )
+                    if not fallback_player_rows:
+                        async with async_session_factory() as session:
+                            team_rows, fallback_player_rows = await ingest_game_boxscores_espn(
+                                session,
+                                games,
+                            )
                     if fallback_player_rows:
                         player_count += fallback_player_rows
                         log.info(
@@ -157,10 +175,10 @@ async def main_async() -> bool:
                             player_rows=player_count,
                             team_rows=team_rows,
                             date=str(yesterday),
-                            source="nba_cdn_boxscore",
+                            source="fallback_boxscore",
                         )
                         return player_count
-                    log.warning("boxscore_cdn_no_rows", date=str(yesterday), games=len(games))
+                    log.warning("boxscore_fallback_no_rows", date=str(yesterday), games=len(games))
                     break
 
         log.info("yesterday_stats_done", player_rows=player_count, date=str(yesterday))
@@ -183,15 +201,23 @@ async def main_async() -> bool:
 
     await run_step("ingest_injuries", with_session(do_ingest_injuries))
 
-    # 5. Fetch odds lines (stubbed — counts today's games)
+    # 5. Fetch odds lines for today's games
     async def fetch_odds_lines(session):
         result = await session.execute(select(Game).where(Game.date == today))
         games = result.scalars().all()
         if not games:
             log.info("no_games_today_odds_skipped", date=str(today))
             return 0
-        log.info("odds_fetch", game_count=len(games), date=str(today))
-        return len(games)
+        props = await fetch_player_props(session, today)
+        totals = await fetch_game_totals(session, today)
+        log.info(
+            "odds_fetched",
+            game_count=len(games),
+            props=props,
+            totals=totals,
+            date=str(today),
+        )
+        return props + totals
 
     await run_step("fetch_odds_lines", with_session(fetch_odds_lines))
 
@@ -219,8 +245,10 @@ async def main_async() -> bool:
                 "validation_failed_no_player_logs",
                 games=game_count,
                 date=str(yesterday),
+                strict_validation=strict_validation,
             )
-            failed = True
+            if _missing_player_logs_should_fail(strict_validation):
+                failed = True
             return
 
         log.info("validation_passed", player_logs=log_count, games=game_count, date=str(yesterday))

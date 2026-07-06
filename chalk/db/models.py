@@ -50,6 +50,9 @@ class Player(Base):
 
 class Game(Base):
     __tablename__ = "games"
+    __table_args__ = (
+        UniqueConstraint("date", "home_team_id", "away_team_id", name="uq_game_matchup"),
+    )
 
     game_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -151,7 +154,16 @@ class Injury(Base):
 
 class BettingLine(Base):
     __tablename__ = "betting_lines"
-    __table_args__ = (UniqueConstraint("game_id", "market", "sportsbook", name="uq_betting_game_market_book"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "game_id",
+            "player_id",
+            "market",
+            "sportsbook",
+            name="uq_betting_game_player_market_book",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     line_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     game_id: Mapped[str] = mapped_column(String(100), nullable=False)

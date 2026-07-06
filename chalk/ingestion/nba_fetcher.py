@@ -1,8 +1,10 @@
 import asyncio
 import hashlib
+import inspect
 import json
 import random
 import re
+import unicodedata
 import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -10,11 +12,12 @@ from pathlib import Path
 import structlog
 from nba_api.stats.endpoints import leaguegamelog, playergamelog, scoreboardv2
 from nba_api.stats.static import players as nba_players_static
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.config import settings
-from chalk.db.models import PlayerGameLog, TeamGameLog
+from chalk.db.models import Game, Player, PlayerGameLog, TeamGameLog
 from chalk.exceptions import IngestError
 from chalk.ingestion.seed import team_id_from_abbr, upsert_games, upsert_player
 
@@ -31,6 +34,21 @@ BASE_DELAY = 2.0
 BATCH_SIZE = 500  # asyncpg has 32767 param limit; 500 rows × ~15 cols = safe
 REQUEST_TIMEOUT = settings.NBA_API_TIMEOUT
 CDN_REQUEST_TIMEOUT = 10
+ESPN_SCOREBOARD_URL = (
+    "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+)
+ESPN_SUMMARY_URL = (
+    "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary"
+)
+ESPN_TEAM_ABBR_ALIASES = {
+    "BKN": "BKN",
+    "GS": "GSW",
+    "NY": "NYK",
+    "NO": "NOP",
+    "SA": "SAS",
+    "UTAH": "UTA",
+    "WSH": "WAS",
+}
 
 # Browser-like headers required by stats.nba.com.
 # stats.nba.com is typically accessed via nba.com links, so Origin/Referer must
@@ -126,6 +144,227 @@ def _is_playoff_game_id(game_id: str) -> bool:
     return len(game_id) >= 3 and game_id[2] == "4"
 
 
+def _is_nba_game_id(game_id: str) -> bool:
+    """True for canonical 10-digit NBA stats game IDs (``002…`` / ``004…``)."""
+    return len(game_id) == 10 and game_id.isdigit() and game_id.startswith("00")
+
+
+def _espn_event_is_playoffs(event: dict) -> bool:
+    """Detect postseason from ESPN scoreboard event metadata."""
+    for season in (
+        event.get("season") or {},
+        ((event.get("competitions") or [{}])[0]).get("season") or {},
+    ):
+        season_type = season.get("type")
+        if season_type is not None:
+            try:
+                if int(season_type) == 3:
+                    return True
+                if int(season_type) == 2:
+                    return False
+            except (TypeError, ValueError):
+                pass
+        slug = str(season.get("slug") or "").lower()
+        if "post" in slug or "playoff" in slug:
+            return True
+    return "playoff" in str(event.get("name") or "").lower()
+
+
+def _parse_espn_scoreboard_events(payload: dict) -> list[dict]:
+    """Parse ESPN scoreboard JSON into internal game header dicts."""
+    results: list[dict] = []
+    for event in payload.get("events", []):
+        competition = (event.get("competitions") or [{}])[0]
+        competitors = competition.get("competitors") or []
+        home = next((c for c in competitors if c.get("homeAway") == "home"), None)
+        away = next((c for c in competitors if c.get("homeAway") == "away"), None)
+        if not home or not away:
+            continue
+        home_team_id = _team_id_from_any_abbr(home.get("team", {}).get("abbreviation", ""))
+        away_team_id = _team_id_from_any_abbr(away.get("team", {}).get("abbreviation", ""))
+        if not home_team_id or not away_team_id:
+            continue
+        espn_event_id = str(event["id"])
+        results.append({
+            "GAME_ID": espn_event_id,
+            "ESPN_EVENT_ID": espn_event_id,
+            "HOME_TEAM_ID": home_team_id,
+            "VISITOR_TEAM_ID": away_team_id,
+            "IS_PLAYOFFS": _espn_event_is_playoffs(event),
+            "STATUS": competition.get("status", {}).get("type", {}).get("description", "scheduled"),
+        })
+    return results
+
+
+async def _nba_game_id_for_matchup(
+    session: AsyncSession,
+    game_date: date,
+    home_team_id: int,
+    away_team_id: int,
+) -> str | None:
+    """Return an existing NBA-format game_id for this matchup, if already ingested."""
+    result = await session.execute(
+        select(Game.game_id).where(
+            Game.date == game_date,
+            Game.home_team_id == home_team_id,
+            Game.away_team_id == away_team_id,
+        )
+    )
+    for (game_id,) in result.all():
+        if _is_nba_game_id(game_id):
+            return game_id
+    return None
+
+
+async def _existing_game_id_for_matchup(
+    session: AsyncSession,
+    game_date: date,
+    home_team_id: int,
+    away_team_id: int,
+) -> str | None:
+    """Return any existing game_id for this matchup."""
+    result = await session.execute(
+        select(Game.game_id).where(
+            Game.date == game_date,
+            Game.home_team_id == home_team_id,
+            Game.away_team_id == away_team_id,
+        )
+    )
+    scalars = result.scalars()
+    if inspect.isawaitable(scalars):
+        scalars = await scalars
+    return scalars.first()
+
+
+async def _canonicalize_game_rows(
+    session: AsyncSession,
+    game_rows: list[dict],
+) -> tuple[list[dict], dict[str, str]]:
+    """Map incoming duplicate matchup game IDs to the existing stored game ID."""
+    canonical_rows: list[dict] = []
+    game_id_map: dict[str, str] = {}
+    matchup_id_map: dict[tuple[date, int, int], str] = {}
+
+    for row in game_rows:
+        home_team_id = row.get("home_team_id")
+        away_team_id = row.get("away_team_id")
+        if not home_team_id or not away_team_id:
+            game_id_map[row["game_id"]] = row["game_id"]
+            canonical_rows.append(row)
+            continue
+
+        matchup_key = (row["date"], home_team_id, away_team_id)
+        batch_game_id = matchup_id_map.get(matchup_key)
+        if batch_game_id:
+            game_id_map[row["game_id"]] = batch_game_id
+            log.info(
+                "game_id_canonicalized",
+                incoming_game_id=row["game_id"],
+                canonical_game_id=batch_game_id,
+                date=str(row["date"]),
+                home_team_id=home_team_id,
+                away_team_id=away_team_id,
+                source="batch",
+            )
+            continue
+
+        existing_game_id = await _existing_game_id_for_matchup(
+            session,
+            row["date"],
+            home_team_id,
+            away_team_id,
+        )
+        canonical_game_id = existing_game_id or row["game_id"]
+        game_id_map[row["game_id"]] = canonical_game_id
+        matchup_id_map[matchup_key] = canonical_game_id
+
+        if existing_game_id and existing_game_id != row["game_id"]:
+            log.info(
+                "game_id_canonicalized",
+                incoming_game_id=row["game_id"],
+                canonical_game_id=existing_game_id,
+                date=str(row["date"]),
+                home_team_id=home_team_id,
+                away_team_id=away_team_id,
+            )
+            canonical_rows.append({**row, "game_id": existing_game_id})
+        else:
+            canonical_rows.append(row)
+
+    return canonical_rows, game_id_map
+
+
+async def _reconcile_espn_scoreboard_games(
+    session: AsyncSession,
+    game_date: date,
+    espn_games: list[dict],
+) -> list[dict]:
+    """Prefer NBA game IDs when the same matchup already exists in the DB."""
+    reconciled: list[dict] = []
+    for g in espn_games:
+        nba_id = await _nba_game_id_for_matchup(
+            session,
+            game_date,
+            g["HOME_TEAM_ID"],
+            g["VISITOR_TEAM_ID"],
+        )
+        game_id = nba_id or g["ESPN_EVENT_ID"]
+        if nba_id and nba_id != g["ESPN_EVENT_ID"]:
+            log.debug(
+                "espn_game_id_reconciled",
+                espn_event_id=g["ESPN_EVENT_ID"],
+                nba_game_id=nba_id,
+            )
+        reconciled.append({**g, "GAME_ID": game_id})
+    return reconciled
+
+
+def _normalize_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]", "", ascii_only.lower())
+
+
+def _team_id_from_any_abbr(abbr: str) -> int:
+    normalized = ESPN_TEAM_ABBR_ALIASES.get((abbr or "").upper(), (abbr or "").upper())
+    return team_id_from_abbr(normalized)
+
+
+async def _player_lookup_by_name(session: AsyncSession) -> dict[tuple[int, str], int]:
+    result = await session.execute(select(Player.player_id, Player.team_id, Player.name))
+    return {
+        (team_id, _normalize_name(name)): player_id
+        for player_id, team_id, name in result.all()
+    }
+
+
+async def _fetch_espn_url(url: str) -> dict:
+    """Fetch an ESPN JSON URL with exponential-backoff retry (max MAX_RETRIES attempts)."""
+    loop = asyncio.get_event_loop()
+    for attempt in range(MAX_RETRIES):
+        await asyncio.sleep(random.uniform(0.2, 0.8))
+        try:
+            def _do_fetch(u: str = url) -> dict:
+                req = urllib.request.Request(u, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
+                with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+                    return json.loads(resp.read().decode())
+            return await loop.run_in_executor(None, _do_fetch)
+        except Exception as exc:
+            delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
+            log.warning("espn_fetch_retry", url=url, attempt=attempt, error=str(exc), delay=delay)
+            if attempt == MAX_RETRIES - 1:
+                raise IngestError(f"ESPN fetch failed after {MAX_RETRIES} attempts: {url}") from exc
+            await asyncio.sleep(delay)
+    raise IngestError("Unreachable")  # pragma: no cover
+
+
+async def _fetch_scoreboard_espn(game_date: date) -> list[dict]:
+    """Fetch a date's NBA slate from ESPN as a fallback source."""
+    url = f"{ESPN_SCOREBOARD_URL}?dates={game_date:%Y%m%d}&limit=100"
+    payload = await _fetch_espn_url(url)
+    return _parse_espn_scoreboard_events(payload)
+
+
 async def _fetch_scoreboard_cdn(game_date: date) -> list[dict]:
     """Fallback: fetch today's scoreboard from the NBA CDN (no auth/bot detection).
 
@@ -195,6 +434,13 @@ def _safe_int(value) -> int:
     if value in (None, ""):
         return 0
     return int(value)
+
+
+def _parse_made_attempted(value) -> tuple[int, int]:
+    if not value:
+        return 0, 0
+    made, _, attempted = str(value).partition("-")
+    return _safe_int(made), _safe_int(attempted)
 
 
 def _safe_bool(value) -> bool:
@@ -315,6 +561,175 @@ async def ingest_game_boxscores_cdn(session: AsyncSession, games) -> tuple[int, 
     return team_count, player_count
 
 
+async def _fetch_boxscore_espn(event_id: str) -> dict:
+    url = f"{ESPN_SUMMARY_URL}?event={event_id}"
+    return await _fetch_espn_url(url)
+
+
+def _espn_stats_map(entry: dict, keys: list[str]) -> dict[str, str]:
+    stats = entry.get("stats") or []
+    return {key: stats[i] for i, key in enumerate(keys) if i < len(stats)}
+
+
+def _build_rows_from_espn_boxscore(
+    payload: dict,
+    game_id: str,
+    game_date: date,
+    season: str,
+    lookup: dict[tuple[int, str], int],
+) -> tuple[list[dict], list[dict]]:
+    boxscore = payload.get("boxscore", {})
+    team_rows: list[dict] = []
+    player_rows: list[dict] = []
+
+    team_totals_by_abbr: dict[str, dict[str, int | float]] = {}
+    for team in boxscore.get("teams", []):
+        abbr = team.get("team", {}).get("abbreviation", "")
+        stats = {s.get("name"): s.get("displayValue") for s in team.get("statistics", [])}
+        fga = _safe_int(stats.get("fieldGoalsAttempted"))
+        fg3a = _safe_int(stats.get("threePointFieldGoalsAttempted"))
+        # ESPN summary does not expose rebound splits or true-shooting percentage.
+        # Use 0.0 for those columns rather than mislabeling total_reb as dreb or FG% as ts_pct.
+        team_totals_by_abbr[abbr] = {
+            "pts": _safe_int(stats.get("points")),
+            "ast": _safe_int(stats.get("assists")),
+            "to_committed": _safe_int(stats.get("turnovers")),
+            "fg3a_rate": (fg3a / fga) if fga else 0.0,
+            "ts_pct": 0.0,  # ESPN doesn't provide TS% — leave unset
+        }
+
+    for team_box in boxscore.get("players", []):
+        team_info = team_box.get("team", {})
+        team_abbr = team_info.get("abbreviation", "")
+        team_id = _team_id_from_any_abbr(team_abbr)
+        if not team_id:
+            continue
+
+        totals = team_totals_by_abbr.get(team_abbr, {})
+        team_rows.append({
+            "game_id": game_id,
+            "team_id": team_id,
+            "game_date": game_date,
+            "season": season,
+            "pts": _safe_int(totals.get("pts")),
+            "pace": 0.0,
+            "off_rtg": 0.0,
+            "def_rtg": 0.0,
+            "ts_pct": float(totals.get("ts_pct") or 0.0),
+            "ast": _safe_int(totals.get("ast")),
+            "to_committed": _safe_int(totals.get("to_committed")),
+            # ESPN summary does not split offensive/defensive rebounds — leave both zero.
+            "oreb": 0,
+            "dreb": 0,
+            "fg3a_rate": float(totals.get("fg3a_rate") or 0.0),
+        })
+
+        for group in team_box.get("statistics", []):
+            keys = group.get("keys") or []
+            athletes = group.get("athletes") or []
+            for idx, entry in enumerate(athletes):
+                athlete = entry.get("athlete") or {}
+                name = athlete.get("displayName", "")
+                player_id = lookup.get((team_id, _normalize_name(name)))
+                if not player_id:
+                    log.warning("espn_player_unmapped", name=name, team_id=team_id)
+                    continue
+                stats = _espn_stats_map(entry, keys)
+                minutes = _parse_minutes(stats.get("minutes"))
+                if minutes <= 0:
+                    continue
+                fgm, fga = _parse_made_attempted(stats.get("fieldGoalsMade-fieldGoalsAttempted"))
+                fg3m, fg3a = _parse_made_attempted(stats.get("threePointFieldGoalsMade-threePointFieldGoalsAttempted"))
+                ftm, fta = _parse_made_attempted(stats.get("freeThrowsMade-freeThrowsAttempted"))
+                player_rows.append({
+                    "game_id": game_id,
+                    "player_id": player_id,
+                    "team_id": team_id,
+                    "game_date": game_date,
+                    "season": season,
+                    "min_played": minutes,
+                    "pts": _safe_int(stats.get("points")),
+                    "reb": _safe_int(stats.get("rebounds")),
+                    "ast": _safe_int(stats.get("assists")),
+                    "stl": _safe_int(stats.get("steals")),
+                    "blk": _safe_int(stats.get("blocks")),
+                    "to_committed": _safe_int(stats.get("turnovers")),
+                    "fg3m": fg3m,
+                    "fg3a": fg3a,
+                    "fgm": fgm,
+                    "fga": fga,
+                    "ftm": ftm,
+                    "fta": fta,
+                    "plus_minus": _safe_int(stats.get("plusMinus")),
+                    "starter": idx < 5,
+                })
+
+    return team_rows, player_rows
+
+
+async def ingest_game_boxscores_espn(session: AsyncSession, games) -> tuple[int, int]:
+    """Ingest team and player rows via ESPN summary API.
+
+    Uses ESPN event IDs for fetch; rows are stored under ``game.game_id`` (NBA ID when
+    the matchup was reconciled on scoreboard ingest).
+    """
+    lookup = await _player_lookup_by_name(session)
+    team_rows: list[dict] = []
+    player_rows: list[dict] = []
+
+    event_map: dict[tuple[int, int], str] = {}
+    if games and any(_is_nba_game_id(g.game_id) for g in games):
+        espn_games = await _fetch_scoreboard_espn(games[0].date)
+        event_map = {
+            (g["HOME_TEAM_ID"], g["VISITOR_TEAM_ID"]): g["ESPN_EVENT_ID"]
+            for g in espn_games
+        }
+
+    for game in games:
+        if _is_nba_game_id(game.game_id):
+            event_id = event_map.get((game.home_team_id, game.away_team_id))
+            if not event_id:
+                log.warning(
+                    "boxscore_espn_skipped_nba_game",
+                    game_id=game.game_id,
+                    home_team_id=game.home_team_id,
+                    away_team_id=game.away_team_id,
+                )
+                continue
+        else:
+            event_id = game.game_id
+
+        try:
+            payload = await _fetch_boxscore_espn(event_id)
+            game_team_rows, game_player_rows = _build_rows_from_espn_boxscore(
+                payload,
+                game.game_id,
+                game.date,
+                game.season,
+                lookup,
+            )
+            team_rows.extend(game_team_rows)
+            player_rows.extend(game_player_rows)
+        except Exception as exc:
+            log.warning(
+                "boxscore_espn_fetch_failed",
+                game_id=game.game_id,
+                espn_event_id=event_id,
+                error=str(exc),
+            )
+
+    team_count = await upsert_team_game_logs(session, team_rows)
+    player_count = await upsert_player_game_logs(session, player_rows)
+    if team_count or player_count:
+        log.info(
+            "boxscore_espn_ingested",
+            games=len(games),
+            team_rows=team_count,
+            player_rows=player_count,
+        )
+    return team_count, player_count
+
+
 async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int:
     """Fetch games from NBA ScoreboardV2 for the given date and upsert into games table.
 
@@ -339,6 +754,20 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
     except Exception as e:
         log.warning("scoreboard_fetch_failed", date=date_str, error=str(e))
 
+    if headers_list:
+        invalid_headers = [
+            g for g in headers_list
+            if not g.get("HOME_TEAM_ID") or not g.get("VISITOR_TEAM_ID")
+        ]
+        if invalid_headers:
+            log.warning(
+                "scoreboard_invalid_team_ids",
+                date=date_str,
+                invalid_count=len(invalid_headers),
+                games=len(headers_list),
+            )
+            headers_list = None
+
     # CDN fallback when ScoreboardV2 fails or returns empty
     if not headers_list:
         try:
@@ -348,6 +777,25 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
                 log.info("scoreboard_cdn_fallback_used", date=date_str, games=len(cdn_games))
         except Exception as cdn_err:
             log.warning("scoreboard_cdn_fallback_failed", date=date_str, error=str(cdn_err))
+
+    # ESPN fallback when NBA endpoints are unavailable from the runtime IP.
+    # NOTE: If this ESPN path runs *before* a ScoreboardV2/CDN run for the same date,
+    # the ESPN 9-digit event IDs are stored in the games table. A later ScoreboardV2
+    # run will insert new rows with canonical 10-digit NBA IDs for the same matchups,
+    # creating duplicate game records. The permanent fix is a unique constraint on
+    # (date, home_team_id, away_team_id) — see docs/ACCURACY_PLAN.md §5 (uq_game_matchup).
+    if not headers_list:
+        try:
+            espn_games = await _fetch_scoreboard_espn(game_date)
+            if espn_games:
+                headers_list = await _reconcile_espn_scoreboard_games(
+                    session,
+                    game_date,
+                    espn_games,
+                )
+                log.info("scoreboard_espn_fallback_used", date=date_str, games=len(headers_list))
+        except Exception as espn_err:
+            log.warning("scoreboard_espn_fallback_failed", date=date_str, error=str(espn_err))
 
     if not headers_list:
         return 0
@@ -366,7 +814,8 @@ async def ingest_today_scoreboard(session: AsyncSession, game_date: date) -> int
             "season": season,
             "home_team_id": g["HOME_TEAM_ID"],
             "away_team_id": g["VISITOR_TEAM_ID"],
-            "is_playoffs": _is_playoff_game_id(gid),
+            "is_playoffs": bool(g.get("IS_PLAYOFFS")) or _is_playoff_game_id(gid),
+            "status": str(g.get("STATUS") or "scheduled").lower(),
         })
 
     if game_rows:
@@ -567,6 +1016,10 @@ async def ingest_player_season(
         })
 
     # Upsert game records first (FK: games), then game logs
+    game_rows, game_id_map = await _canonicalize_game_rows(session, game_rows)
+    for row in rows:
+        row["game_id"] = game_id_map.get(row["game_id"], row["game_id"])
+
     await upsert_games(session, game_rows)
     await session.commit()
     return await upsert_player_game_logs(session, rows)
@@ -654,6 +1107,10 @@ async def ingest_team_season(session: AsyncSession, season: str) -> int:
         })
 
     # Upsert games first, then team logs
+    game_rows, game_id_map = await _canonicalize_game_rows(session, game_rows)
+    for row in rows:
+        row["game_id"] = game_id_map.get(row["game_id"], row["game_id"])
+
     await upsert_games(session, game_rows)
     await session.commit()
     return await upsert_team_game_logs(session, rows)

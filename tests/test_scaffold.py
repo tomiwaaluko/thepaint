@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy import UniqueConstraint
 
 from chalk.config import Settings
 from chalk.db.models import (
@@ -31,9 +32,10 @@ class TestConfig:
         assert s.REDIS_URL == "redis://localhost:6379/0"
         assert s.LOG_LEVEL == "INFO"
 
-    def test_settings_requires_database_url(self):
+    def test_settings_requires_database_url(self, monkeypatch):
+        monkeypatch.delenv("DATABASE_URL", raising=False)
         # DATABASE_URL has a default in our Settings, so this should work
-        s = Settings()
+        s = Settings(_env_file=None)
         assert "chalk" in s.DATABASE_URL
 
 
@@ -56,7 +58,9 @@ class TestORMModels:
             "teams", "players", "games", "player_game_logs",
             "team_game_logs", "injuries", "betting_lines", "predictions",
         }
-        assert expected == tables
+        # Subset, not equality: other sport packages (e.g. chalk.mlb) register
+        # additional tables on the shared Base when imported.
+        assert expected <= tables
 
     @pytest.mark.asyncio
     async def test_create_team(self, session):
@@ -107,6 +111,18 @@ class TestORMModels:
         await session.commit()
         result = await session.get(Game, "0022301234")
         assert result.season == "2023-24"
+
+    def test_game_matchup_unique_constraint(self):
+        constraint = next(
+            c
+            for c in Game.__table__.constraints
+            if isinstance(c, UniqueConstraint) and c.name == "uq_game_matchup"
+        )
+        assert [column.name for column in constraint.columns] == [
+            "date",
+            "home_team_id",
+            "away_team_id",
+        ]
 
     @pytest.mark.asyncio
     async def test_player_game_log_indexes(self):

@@ -6,6 +6,7 @@ build/
 .eggs/
 *.egg
 .env
+.claude/settings.local.json
 .cache/
 .venv/
 venv/
@@ -26,3 +27,4 @@ tmp_pytest_run3/
 *.log
 *.db
 *.pdf
+.coverage
