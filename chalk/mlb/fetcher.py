@@ -188,7 +188,11 @@ async def ingest_mlb_schedule(
     )
 
     stub_teams: dict[int, dict] = {}
-    games: list[dict] = []
+    # Keyed by game_pk so a gamePk echoed twice in one payload (suspended/
+    # resumed games, or a leg repeated across date entries) collapses to a
+    # single row — Postgres rejects two rows sharing the ON CONFLICT key in
+    # the same statement ("cannot affect row a second time"). Last leg wins.
+    games_by_pk: dict[int, dict] = {}
     for day in data.get("dates", []):
         for g in day.get("games", []):
             if g.get("gameType") not in INGESTED_GAME_TYPES:
@@ -219,8 +223,9 @@ async def ingest_mlb_schedule(
                 continue
             stub_teams[home["id"]] = home
             stub_teams[away["id"]] = away
-            games.append(row)
+            games_by_pk[row["game_pk"]] = row
 
+    games = list(games_by_pk.values())
     if not games:
         log.info("no_mlb_games", start=str(start_date), end=str(end_date))
         return 0
