@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-06 (later) — CHA-8: API error-response hardening
+
+### Done
+- Sanitized the app-level 500 handlers in `chalk/api/main.py`: `PredictionError`/`IngestError` now return a generic message + error type and log the real exception server-side (structlog `prediction_error`/`ingest_error` events with request path). Raw exception text (upstream URLs, hostnames, driver errors) no longer reaches anonymous callers. `FeatureError` (422) keeps meaningful input-related detail by design.
+- The other two CHA-8 items (constant-time invalidation-token compare, `.env.example` CORS guidance) were already shipped in PR #34.
+
+### Metrics
+- Tests: 321 passed (318 + 3 new handler tests asserting no internal detail leaks); ruff clean.
+
+### Pending
+- Remaining audit tickets CHA-9…CHA-15.
+
+### Next
+- CHA-9 (shared Redis pool + SCAN) — same file neighborhood, natural follow-up.
+
 ## 2026-07-06 — Security audit: CI, dependency pinning, API abuse protection
 
 ### Done

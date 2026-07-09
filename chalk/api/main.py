@@ -71,8 +71,18 @@ app.include_router(props.router)
 app.include_router(fantasy.router)
 
 
+# 422s keep meaningful (input-related) detail; 500s return a generic message
+# and log the real error server-side — raw exception text can carry upstream
+# URLs, hostnames, and driver errors that anonymous callers shouldn't see.
+
+
+def _sanitize_log_value(value: str) -> str:
+    """Escape CR/LF so attacker-controlled input can't forge log lines (CWE-117)."""
+    return value.replace("\r", "\\r").replace("\n", "\\n")
+
+
 @app.exception_handler(FeatureError)
-async def feature_error_handler(request, exc):
+async def feature_error_handler(request: Request, exc: FeatureError):
     return JSONResponse(
         status_code=422,
         content={"detail": str(exc), "type": "feature_error"},
@@ -80,16 +90,26 @@ async def feature_error_handler(request, exc):
 
 
 @app.exception_handler(PredictionError)
-async def prediction_error_handler(request, exc):
+async def prediction_error_handler(request: Request, exc: PredictionError):
+    log.error(
+        "prediction_error",
+        path=_sanitize_log_value(request.url.path),
+        error=_sanitize_log_value(str(exc)),
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "type": "prediction_error"},
+        content={"detail": "Prediction failed. Please try again later.", "type": "prediction_error"},
     )
 
 
 @app.exception_handler(IngestError)
-async def ingest_error_handler(request, exc):
+async def ingest_error_handler(request: Request, exc: IngestError):
+    log.error(
+        "ingest_error",
+        path=_sanitize_log_value(request.url.path),
+        error=_sanitize_log_value(str(exc)),
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "type": "ingest_error"},
+        content={"detail": "Data ingestion failed. Please try again later.", "type": "ingest_error"},
     )

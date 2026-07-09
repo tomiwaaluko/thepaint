@@ -15,6 +15,22 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ---
 
+## Security Audit — CHA-8 Error-Response Hardening (2026-07-06, follow-up)
+
+Branch `claude/repo-security-audit-ljdr3d` (restarted from `railway` after
+PR #34 merged). Implements Linear CHA-8.
+
+- **What & why:** the `PredictionError`/`IngestError` app-level handlers
+  echoed `str(exc)` to clients with status 500 — raw upstream error text
+  (URLs, hostnames, driver messages) is reconnaissance data. Handlers now
+  log the real error via structlog and return a generic message + type.
+  `FeatureError` 422 keeps input-related detail. The ticket's other two
+  items (constant-time token compare, CORS guidance) shipped in PR #34.
+- **Files:** `chalk/api/main.py`, `tests/test_api/test_error_handlers.py` (new).
+- **Status:** 321 tests passing; ruff clean.
+
+---
+
 ## Security Audit — High-Priority Fixes (2026-07-06)
 
 Branch `claude/repo-security-audit-ljdr3d` (PR into `railway`). Implements the
