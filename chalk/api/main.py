@@ -76,6 +76,11 @@ app.include_router(fantasy.router)
 # URLs, hostnames, and driver errors that anonymous callers shouldn't see.
 
 
+def _sanitize_log_value(value: str) -> str:
+    """Escape CR/LF so attacker-controlled input can't forge log lines (CWE-117)."""
+    return value.replace("\r", "\\r").replace("\n", "\\n")
+
+
 @app.exception_handler(FeatureError)
 async def feature_error_handler(request: Request, exc: FeatureError):
     return JSONResponse(
@@ -86,7 +91,11 @@ async def feature_error_handler(request: Request, exc: FeatureError):
 
 @app.exception_handler(PredictionError)
 async def prediction_error_handler(request: Request, exc: PredictionError):
-    log.error("prediction_error", path=request.url.path, error=str(exc))
+    log.error(
+        "prediction_error",
+        path=_sanitize_log_value(request.url.path),
+        error=_sanitize_log_value(str(exc)),
+    )
     return JSONResponse(
         status_code=500,
         content={"detail": "Prediction failed. Please try again later.", "type": "prediction_error"},
@@ -95,7 +104,11 @@ async def prediction_error_handler(request: Request, exc: PredictionError):
 
 @app.exception_handler(IngestError)
 async def ingest_error_handler(request: Request, exc: IngestError):
-    log.error("ingest_error", path=request.url.path, error=str(exc))
+    log.error(
+        "ingest_error",
+        path=_sanitize_log_value(request.url.path),
+        error=_sanitize_log_value(str(exc)),
+    )
     return JSONResponse(
         status_code=500,
         content={"detail": "Data ingestion failed. Please try again later.", "type": "ingest_error"},

@@ -17,8 +17,8 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ## Security Audit — CHA-8 Error-Response Hardening (2026-07-06, follow-up)
 
-Branch `claude/repo-security-audit-ljdr3d` (restarted from `railway` after PR
-#34 merged). Implements Linear CHA-8.
+Branch `claude/repo-security-audit-ljdr3d` (restarted from `railway` after
+PR #34 merged). Implements Linear CHA-8.
 
 - **What & why:** the `PredictionError`/`IngestError` app-level handlers
   echoed `str(exc)` to clients with status 500 — raw upstream error text

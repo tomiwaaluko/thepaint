@@ -52,6 +52,7 @@ async def test_ingest_error_returns_generic_500(error_routes):
     body = resp.json()
     assert body["type"] == "ingest_error"
     assert SECRET_DETAIL not in resp.text
+    assert "supabase" not in resp.text
 
 
 async def test_feature_error_keeps_input_detail_422(error_routes):
