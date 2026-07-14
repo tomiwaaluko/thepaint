@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Tha Paint** — an NBA Statline Predictor. A machine learning system that predicts NBA player and team statlines for any given matchup. It powers four outputs:
+**Chalk** — an NBA Statline Predictor. A machine learning system that predicts NBA player and team statlines for any given matchup. It powers four outputs:
 - Player stat predictions (PTS, REB, AST, STL, BLK, TO, 3PM, FG%)
 - Team-level game projections (total points, pace, offensive/defensive rating)
 - Over/under probability distributions for sports betting
@@ -34,7 +34,7 @@ The architecture overview lives in `docs/OVERVIEW.md`, and phase planning docs l
 ## Repo Structure
 
 ```
-tha_paint/
+chalk/
 ├── CLAUDE.md                        ← you are here
 ├── .agents/
 │   └── skills/                      ← repo agent skill files
@@ -45,7 +45,7 @@ tha_paint/
 │       └── model-training/
 ├── alembic/                         ← database migrations
 │   └── versions/
-├── tha_paint/
+├── chalk/
 │   ├── __init__.py
 │   ├── config.py                    ← settings via pydantic-settings
 │   ├── db/
@@ -209,14 +209,14 @@ The system is now operating during the NBA Playoffs. Key differences from regula
 - Functions / variables: `snake_case`
 - Constants: `UPPER_SNAKE_CASE`
 - DB columns: `snake_case`
-- MLflow experiment names: `tha_paint/{stat}/{model_type}` e.g. `tha_paint/pts/xgboost`
+- MLflow experiment names: `chalk/{stat}/{model_type}` e.g. `chalk/pts/xgboost`
 - MLflow run names: `{player_last_name}_{season}` e.g. `james_2024`
 - API routes: `/v1/{resource}/{id}/{action}` e.g. `/v1/players/2544/predict`
 
 ## Environment Variables (see .env.example)
 
 ```
-DATABASE_URL=postgresql+asyncpg://tha_paint:tha_paint@localhost:5432/tha_paint
+DATABASE_URL=postgresql+asyncpg://chalk:chalk@localhost:5432/chalk
 REDIS_URL=redis://localhost:6379/0
 ODDS_API_KEY=
 MLFLOW_TRACKING_URI=http://localhost:5000
@@ -226,7 +226,7 @@ NBA_API_CACHE_DIR=.cache/nba_api
 
 ## Error Handling Patterns
 
-- Raise custom exceptions from `tha_paint/exceptions.py`: `IngestError`, `FeatureError`, `PredictionError`
+- Raise custom exceptions from `chalk/exceptions.py`: `IngestError`, `FeatureError`, `PredictionError`
 - Never swallow exceptions silently — always log before re-raising
 - Use `structlog` for all logging (structured JSON logs)
 - Retry logic: exponential backoff with jitter, max 5 retries, for all external API calls

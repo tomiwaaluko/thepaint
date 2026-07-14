@@ -1,4 +1,4 @@
-# The Paint — Project TODO
+# Chalk — Project TODO
 
 ## How to Use This File
 At the start of every Claude Code session, read this file and the current phase file.
@@ -332,7 +332,7 @@ Track every significant architectural decision here so future sessions don't re-
 | DB | PostgreSQL + TimescaleDB | Time-series optimized, free | Pre-build |
 | API framework | FastAPI async | Performance, async-native | Pre-build |
 | Model structure | One model per stat | Easier debugging, independent feature sets | Pre-build |
-| Project name | The Paint | Betting slang for the court / paint area; clean brand | Pre-build |
+| Project name | Chalk | Betting slang for the court / paint area; clean brand | Pre-build |
 | Production DB | Supabase (Session Pooler) | Railway is IPv4-only; Direct Connection incompatible; Transaction Pooler breaks asyncpg | 2026-03-16 |
 | Production scheduling | Railway Cron Jobs (not Airflow) | Airflow requires 3 services + overhead; Railway cron is zero-infra | 2026-03-16 |
 | Production builder | Dockerfile (not Railpack) | Railpack doesn't install the `chalk` package; Dockerfile ensures full env | 2026-03-16 |

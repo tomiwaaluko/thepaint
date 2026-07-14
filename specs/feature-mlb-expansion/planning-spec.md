@@ -16,7 +16,7 @@
 - Frontend (if touched) `npm run build` / `lint`: **N/A** (dashboard out of scope for this slice)
 
 ## Problem statement
-Tha Paint predicts statlines for exactly one sport. The NBA season runs October–June,
+Chalk predicts statlines for exactly one sport. The NBA season runs October–June,
 so the system sits idle (no games to predict, no betting/fantasy value) for roughly
 four months a year, and the project's reach is capped at one market. MLB was chosen
 over NFL because its daily cadence matches the existing ingest/predict rhythm, its

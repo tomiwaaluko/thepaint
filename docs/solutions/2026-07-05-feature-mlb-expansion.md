@@ -6,7 +6,7 @@
 
 ## Context
 
-First slice of extending Tha Paint to a second sport. Decision (recorded with the
+First slice of extending Chalk to a second sport. Decision (recorded with the
 user): **MLB over NFL** — daily cadence matches the existing cron architecture,
 162-game seasons give deep per-player samples, and the batter-vs-pitcher matchup
 decomposes cleanly into the one-model-per-stat design. Delivery was **sliced**:
