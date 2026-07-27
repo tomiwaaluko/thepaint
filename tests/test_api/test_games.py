@@ -1,5 +1,5 @@
 """Tests for the /v1/games/today endpoint."""
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -7,8 +7,20 @@ from httpx import ASGITransport, AsyncClient
 
 from chalk.api.dependencies import get_db, get_redis
 from chalk.api.main import app
+from chalk.api.routes.games import ET_TZ
 
 INGEST_PATCH = "chalk.api.routes.games.ingest_today_scoreboard"
+
+
+def _today_et() -> date:
+    """The date the route considers "today".
+
+    The route works in US Eastern (the NBA's scheduling zone), not in the
+    process's local zone. Asserting against date.today() passes on a developer
+    machine in ET and fails on a UTC CI runner for the four to five hours
+    between 8 PM ET and midnight ET, when UTC has already rolled over.
+    """
+    return datetime.now(ET_TZ).date()
 
 
 def _make_redis():
@@ -69,7 +81,7 @@ async def test_today_games_returns_empty_list_when_no_games(mock_ingest):
 async def test_today_games_returns_game_list():
     mock_game = MagicMock()
     mock_game.game_id = "0022500100"
-    mock_game.date = date.today()
+    mock_game.date = _today_et()
     mock_game.home_team_id = 1
     mock_game.away_team_id = 2
     mock_game.status = "scheduled"
@@ -164,7 +176,7 @@ async def test_today_games_no_stale_fallback(mock_ingest):
             resp = await client.get("/v1/games/today")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["date"] == str(date.today())
+        assert data["date"] == str(_today_et())
         assert data["games"] == []
     finally:
         app.dependency_overrides.clear()
@@ -175,7 +187,7 @@ async def test_today_games_auto_ingest_fallback():
     """When no games in DB, auto-ingest from NBA API fetches them."""
     mock_game = MagicMock()
     mock_game.game_id = "0022500921"
-    mock_game.date = date.today()
+    mock_game.date = _today_et()
     mock_game.home_team_id = 1
     mock_game.away_team_id = 2
     mock_game.status = "scheduled"

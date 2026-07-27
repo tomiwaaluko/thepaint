@@ -81,6 +81,12 @@ jobs:
 
       # Nothing checked the 60+ pinned Python packages against a CVE feed.
       # The lockfiles were reproducible but never audited.
+      #
+      # This gate is a hard fail on purpose: every dependency here is pinned in
+      # requirements.txt, so a fix is normally a one-line bump
+      # (uv pip compile ... --upgrade-package <name>). If an advisory ever lands
+      # with no fixed version published, add `--ignore-vuln <ID>` with a comment
+      # naming the advisory and why it is not reachable. Do not delete the step.
       - name: pip-audit (runtime dependencies)
         run: |
           pip install pip-audit

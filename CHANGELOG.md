@@ -28,6 +28,15 @@ A `ce-security-reviewer` pass on the first draft caught three things that would 
 - **A `TRUSTED_PROXY_HOPS` set higher than the real hop count was worse than the old code** - the attacker picks their own bucket while honest traffic collapses into one. Now bounded (`ge=0, le=4`), the selected entry must parse as an IP, and the peer-fallback path logs once so a misconfiguration is visible.
 - **The local-counter overflow reset every caller's count**, making the ceiling resettable by the party it constrains. Now fails closed for new keys instead.
 - **`_urlopen_https` did not survive redirects** - urllib follows them by default and the stock handler permits `http` and `ftp` targets. Added a redirect handler that re-checks the scheme per hop, and corrected the docstring, which had overstated the guarantee.
+
+### Fixed after first CI run
+The new workflow is the first thing to have ever run this suite on a UTC machine, and it went red immediately. Neither failure was caused by the security changes; both were latent and are fixed here because the new gate is what surfaced them.
+
+- **`test_today_games_no_stale_fallback` is timezone-dependent.** It asserted the response date equalled `date.today()` - the *runner's* local date - while `/v1/games/today` computes the date in `America/New_York`. The two disagree for the four to five hours between 8 PM ET and midnight ET, which is exactly when the first CI run happened. The test now derives the expected date from the same zone the route uses, so it no longer depends on where or when it runs. The three other `date.today()` call sites in that file were doing the same thing as mock data and were changed to match.
+- **`pyasn1` 0.6.3 carried PYSEC-2026-3455/3456/3457** (transitive, via `pyasn1-modules` ← `google-auth`), all fixed in 0.6.4. Bumped in both lockfiles. Worth recording that a plain recompile did *not* pick this up - uv treats existing pins in the output file as preferences, so the bump needed `--upgrade-package pyasn1`. A recompile alone is not a dependency update.
+
+### Not changed
+- The `pip-audit` step stays a hard failure. Every dependency here is pinned, so a fix is normally a one-line bump; the workflow now documents `--ignore-vuln` as the escape hatch for an advisory with no published fix, so the next person patches the gate rather than deleting it.
 - Also: `get_redis` built a new connection pool per request; ReDoc's webfonts were blocked by the docs CSP.
 
 ### Metrics
