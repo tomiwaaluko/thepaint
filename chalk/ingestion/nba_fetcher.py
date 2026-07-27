@@ -79,10 +79,26 @@ NBA_HEADERS = {
 _NBA_PROXY: str | None = settings.NBA_PROXY_URL or None
 
 
+def _urlopen_https(url: str, timeout: int):
+    """Open ``url`` over HTTPS only.
+
+    ``urllib.request.urlopen`` honours whatever scheme it is handed, including
+    ``file:`` and ``ftp:``. Every caller here passes a hardcoded https constant,
+    so this is defence in depth rather than a fix for a live bug - but it turns
+    "no caller currently passes a bad scheme" into an invariant that holds even
+    if one of these URLs later becomes configurable.
+    """
+    if not url.startswith("https://"):
+        raise IngestError(f"Refusing to fetch non-HTTPS URL: {url}")
+    # Scheme is validated immediately above, which is what S310 asks for.
+    req = urllib.request.Request(url, headers={"User-Agent": NBA_HEADERS["User-Agent"]})  # noqa: S310
+    return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
+
+
 def _cache_path(endpoint: str, params: dict) -> Path:
     # Sanitize endpoint name to prevent path traversal — keep only alphanumerics/underscores
     safe_endpoint = "".join(c for c in endpoint if c.isalnum() or c == "_")
-    key = hashlib.md5(f"{safe_endpoint}{sorted(params.items())}".encode()).hexdigest()
+    key = hashlib.md5(f"{safe_endpoint}{sorted(params.items())}".encode(), usedforsecurity=False).hexdigest()
     return CACHE_DIR / safe_endpoint / f"{key}.json"
 
 
@@ -97,7 +113,7 @@ async def _fetch_with_backoff(endpoint_cls, params: dict, endpoint_name: str) ->
 
     for attempt in range(MAX_RETRIES):
         # Small jitter before every request to avoid thundering-herd on retries
-        await asyncio.sleep(random.uniform(0.5, 1.5))
+        await asyncio.sleep(random.uniform(0.5, 1.5))  # noqa: S311 - retry jitter, not security-sensitive
         try:
             loop = asyncio.get_event_loop()
             kwargs: dict = {"headers": NBA_HEADERS, "timeout": REQUEST_TIMEOUT}
@@ -114,7 +130,7 @@ async def _fetch_with_backoff(endpoint_cls, params: dict, endpoint_name: str) ->
             log.info("fetch_success", endpoint=endpoint_name, attempt=attempt)
             return data
         except Exception as exc:
-            delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
+            delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)  # noqa: S311 - retry jitter, not security-sensitive
             log.warning(
                 "fetch_retry", endpoint=endpoint_name,
                 attempt=attempt, error=str(exc), delay=delay,
@@ -342,15 +358,14 @@ async def _fetch_espn_url(url: str) -> dict:
     """Fetch an ESPN JSON URL with exponential-backoff retry (max MAX_RETRIES attempts)."""
     loop = asyncio.get_event_loop()
     for attempt in range(MAX_RETRIES):
-        await asyncio.sleep(random.uniform(0.2, 0.8))
+        await asyncio.sleep(random.uniform(0.2, 0.8))  # noqa: S311 - retry jitter, not security-sensitive
         try:
             def _do_fetch(u: str = url) -> dict:
-                req = urllib.request.Request(u, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
-                with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+                with _urlopen_https(u, REQUEST_TIMEOUT) as resp:
                     return json.loads(resp.read().decode())
             return await loop.run_in_executor(None, _do_fetch)
         except Exception as exc:
-            delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
+            delay = BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)  # noqa: S311 - retry jitter, not security-sensitive
             log.warning("espn_fetch_retry", url=url, attempt=attempt, error=str(exc), delay=delay)
             if attempt == MAX_RETRIES - 1:
                 raise IngestError(f"ESPN fetch failed after {MAX_RETRIES} attempts: {url}") from exc
@@ -375,8 +390,7 @@ async def _fetch_scoreboard_cdn(game_date: date) -> list[dict]:
     loop = asyncio.get_event_loop()
 
     def _do_fetch() -> list[dict]:
-        req = urllib.request.Request(cdn_url, headers={"User-Agent": NBA_HEADERS["User-Agent"]})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with _urlopen_https(cdn_url, CDN_REQUEST_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode())
         games_raw = payload.get("scoreboard", {}).get("games", [])
         results: list[dict] = []
@@ -400,11 +414,7 @@ async def _fetch_boxscore_cdn(game_id: str) -> dict:
     loop = asyncio.get_event_loop()
 
     def _do_fetch() -> dict:
-        req = urllib.request.Request(
-            cdn_url,
-            headers={"User-Agent": NBA_HEADERS["User-Agent"]},
-        )
-        with urllib.request.urlopen(req, timeout=CDN_REQUEST_TIMEOUT) as resp:
+        with _urlopen_https(cdn_url, CDN_REQUEST_TIMEOUT) as resp:
             return json.loads(resp.read().decode())
 
     return await loop.run_in_executor(None, _do_fetch)

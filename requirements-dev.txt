@@ -51,6 +51,13 @@ click==8.4.2
     #   uvicorn
 cloudpickle==3.1.2
     # via mlflow-skinny
+colorama==0.4.6
+    # via
+    #   click
+    #   colorlog
+    #   pytest
+    #   tqdm
+    #   uvicorn
 colorlog==6.10.1
     # via optuna
 contourpy==1.3.3
@@ -109,8 +116,6 @@ graphql-relay==3.2.0
     # via graphene
 greenlet==3.5.3
     # via sqlalchemy
-gunicorn==26.0.0
-    # via mlflow
 h11==0.16.0
     # via
     #   httpcore
@@ -186,8 +191,6 @@ numpy==2.4.6
     #   scipy
     #   skops
     #   xgboost
-nvidia-nccl-cu12==2.30.7
-    # via xgboost
 opentelemetry-api==1.43.0
     # via
     #   mlflow-skinny
@@ -208,7 +211,6 @@ optuna==4.9.0
     # via chalk (pyproject.toml)
 packaging==26.2
     # via
-    #   gunicorn
     #   matplotlib
     #   mlflow-skinny
     #   mlflow-tracing
@@ -284,6 +286,8 @@ python-dotenv==1.2.2
     #   uvicorn
 pytz==2026.2
     # via pandas
+pywin32==312
+    # via docker
 pyyaml==6.0.3
     # via
     #   mlflow-skinny
@@ -368,7 +372,9 @@ typing-inspection==0.4.2
     #   pydantic
     #   pydantic-settings
 tzdata==2026.2
-    # via pandas
+    # via
+    #   faker
+    #   pandas
 urllib3==2.7.0
     # via
     #   databricks-sdk
@@ -378,8 +384,8 @@ uvicorn==0.50.0
     # via
     #   chalk (pyproject.toml)
     #   mlflow-skinny
-uvloop==0.22.1
-    # via uvicorn
+waitress==3.0.2
+    # via mlflow
 watchfiles==1.2.0
     # via uvicorn
 wcwidth==0.8.2

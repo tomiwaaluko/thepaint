@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-07-26 — Security hardening pass
+
+### Done
+- **Rate-limit bypass closed.** `_client_ip` took the last `X-Forwarded-For` entry with the hop count implied rather than stated; it is now driven by a `TRUSTED_PROXY_HOPS` setting (default 1, `0` ignores the header entirely). Getting this wrong fails in both directions - too far left and callers choose their own bucket, too far right and every caller shares one.
+- **Correlated fail-open removed.** The limiter allowed every request when Redis was unreachable. Because the ingest stampede lock in `routes/games.py` also defaults to acquired on a Redis error, one outage removed both abuse controls simultaneously. The limiter now degrades to a bounded in-process counter.
+- **Error sanitization is no longer bypassable.** Five routes caught `PredictionError` and re-raised `detail=str(e)`, so the sanitizing handler added in CHA-8 never fired on the paths that most commonly raise. Added a `NotFoundError` subclass for messages we author (safe to echo); a bare `PredictionError` now reaches the app-level handler as intended.
+- **MLflow and Optuna moved to a `training` extra.** `CLAUDE.md` states MLflow is not deployed in production, yet it was a hard runtime dependency pulling flask, werkzeug, gunicorn, graphene, gitpython and pyarrow into the API image. Runtime lockfile went from **115 to 62 packages**.
+- **`ALLOWED_ORIGINS="*"` is now rejected at startup.** Survivable today only because `allow_credentials` defaults to False - two settings in different files with nothing coupling them.
+- CSP, HSTS and COOP added to `SecurityHeadersMiddleware`, with `/docs` and `/redoc` exempted so Swagger still renders.
+- `DELETE /v1/games/{game_id}/cache` now pattern-validates `game_id` like every other route in that file.
+- Ruff's `S` (flake8-bandit) ruleset enabled - it was off, so the linter caught zero security issues and a `# noqa: S311` already existed for a rule that was not enabled. All 14 findings triaged: md5 cache keys marked `usedforsecurity=False`, `urlopen` calls routed through a scheme-checking helper, jitter suppressions justified inline, and a silent `except: pass` in `scripts/ingest_recent.py` now reports failures.
+- `docker-compose.yml`: the Fernet key default used `$(...)` inside a YAML value, which Compose does not evaluate - every deployment shared one literal non-key and Airflow's connection encryption was worthless. Now fails closed, as does the Airflow admin password. All published ports bound to `127.0.0.1`.
+- `dashboard` is served by `serve` instead of `vite preview` (explicitly not a production server, and `npx` re-resolved the package at container start); dropped the `.up.railway.app` wildcard host.
+- `MODEL_DIR` resolved from `__file__` rather than the process working directory.
+- The repo's only raw-SQL f-string (`scripts/ingest_recent.py`) is parameterized.
+- CI gained `pip-audit`, `npm audit`, and gitleaks secret scanning; added Dependabot targeting `railway`. Nothing checked the pinned dependencies against a CVE feed.
+- `SECURITY.md` now states the threat model explicitly - that the API is intentionally unauthenticated and `/docs` is public, and that `models/*.joblib` are pickle-based and loaded at web-process startup.
+
+### Metrics
+- Tests: **329 passed** (was 317). New coverage for XFF hop handling, the local-counter fallback and its bounds, and window rollover.
+- Ruff: clean with `S` enabled.
+- Runtime dependencies: 115 -> 62 packages.
+
+### Pending
+- Authentication on the public API is deliberately out of scope - it would break the deployed dashboard and is a product decision.
+- The in-memory OAuth-style stampede lock and rate-limit fallback remain per-process; both assume a single replica.
+
+### Next
+- Decide whether `TRUSTED_PROXY_HOPS=1` matches the live Railway topology, and confirm `ALLOWED_ORIGINS` is set explicitly in the Railway dashboard.
+
 ## 2026-07-06 (later) — CHA-8: API error-response hardening
 
 ### Done

@@ -28,7 +28,7 @@ INTER_REQUEST_DELAY = 2.5
 
 
 def _cache_path(endpoint: str, params: dict) -> Path:
-    key = hashlib.md5(f"{endpoint}{sorted(params.items())}".encode()).hexdigest()
+    key = hashlib.md5(f"{endpoint}{sorted(params.items())}".encode(), usedforsecurity=False).hexdigest()
     return CACHE_DIR / endpoint / f"{key}.json"
 
 

@@ -10,7 +10,7 @@ from chalk.api.cache import get_cached, set_cached
 from chalk.api.dependencies import get_db, get_redis
 from chalk.api.schemas import GAME_ID_PATTERN, PlayerPredictionResponse
 from chalk.db.models import Player, PlayerGameLog
-from chalk.exceptions import FeatureError, PredictionError
+from chalk.exceptions import FeatureError, NotFoundError
 from chalk.ingestion.injury_fetcher import get_player_status
 from chalk.predictions.player import predict_player
 
@@ -52,10 +52,15 @@ async def predict_player_statline(
 
     try:
         response = await predict_player(session, player_id, game_id, as_of_date)
-    except PredictionError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except NotFoundError as e:
+        # Safe to echo: NotFoundError messages are authored in this codebase
+        # and contain only identifiers the caller already supplied. A bare
+        # PredictionError is deliberately NOT caught here - it falls through to
+        # the app-level handler, which logs the real error and returns a
+        # generic message rather than leaking upstream or driver text.
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except FeatureError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     response = await _with_latest_injury_status(session, response, as_of_date)
     await set_cached(redis, cache_key, response)

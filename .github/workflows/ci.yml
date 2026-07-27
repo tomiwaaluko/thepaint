@@ -60,3 +60,49 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  audit:
+    name: Security — dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      # Nothing checked the 60+ pinned Python packages against a CVE feed.
+      # The lockfiles were reproducible but never audited.
+      - name: pip-audit (runtime dependencies)
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --strict
+
+      - name: npm audit (dashboard)
+        working-directory: dashboard
+        run: npm audit --audit-level=high
+
+  secrets:
+    name: Security — secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: a secret committed and later deleted is still in the
+          # objects, and SECURITY.md's first contributor rule is "never commit
+          # secrets" - which nothing was enforcing.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

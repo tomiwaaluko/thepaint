@@ -10,7 +10,11 @@ from chalk.models.base import BaseStatModel
 
 log = structlog.get_logger()
 
-MODEL_DIR = Path("models")
+# Resolved from this file's location rather than the process working directory.
+# A relative Path("models") only worked because the Dockerfile happens to set
+# WORKDIR /app; any invocation from another directory (a script, a test runner,
+# a cron with a different cwd) would silently resolve somewhere else.
+MODEL_DIR = Path(__file__).resolve().parents[2] / "models"
 
 REGISTERED_MODEL_NAMES = {
     "pts": "chalk-player-pts",

@@ -1,5 +1,14 @@
+# SECURITY: the production frontend is served by `serve`, not `vite preview`.
+#
+# Vite's docs are explicit that `preview` is a development convenience and not
+# a production server. Beyond that, `npx vite preview` re-resolved the package
+# at container start, so the binary actually executed was decided at runtime
+# rather than at build time.
+#
+# `serve -s` also gives correct SPA history fallback, which the app needs for
+# client-side routes.
 [build]
 buildCommand = "npm run build"
 
 [deploy]
-startCommand = "npx vite preview --host 0.0.0.0 --port $PORT"
+startCommand = "npm run start"

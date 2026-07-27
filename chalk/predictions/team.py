@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chalk.api.schemas import TeamPredictionResponse
 from chalk.db.models import Game, Team, TeamGameLog
-from chalk.exceptions import PredictionError
+from chalk.exceptions import NotFoundError
 from chalk.models.registry import get_model_version, load_model
 
 log = structlog.get_logger()
@@ -23,12 +23,12 @@ async def predict_team(
     """Generate team-level prediction for a game."""
     team = await session.get(Team, team_id)
     if not team:
-        raise PredictionError(f"Team {team_id} not found")
+        raise NotFoundError(f"Team {team_id} not found")
 
     result = await session.execute(select(Game).where(Game.game_id == game_id))
     game = result.scalar_one_or_none()
     if not game:
-        raise PredictionError(f"Game {game_id} not found")
+        raise NotFoundError(f"Game {game_id} not found")
 
     if game.home_team_id == team_id:
         opp_team_id = game.away_team_id

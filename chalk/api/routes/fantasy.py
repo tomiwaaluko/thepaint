@@ -13,7 +13,7 @@ from chalk.api.dependencies import get_db, get_redis
 from chalk.api.schemas import GAME_ID_PATTERN
 from chalk.api.schemas_betting import FantasyProjectionResponse, SlateFantasyResponse
 from chalk.db.models import Game, PlayerGameLog
-from chalk.exceptions import PredictionError
+from chalk.exceptions import NotFoundError
 from chalk.fantasy.scoring import compute_all_fantasy_scores
 from chalk.fantasy.simulation import simulate_fantasy_scores
 from chalk.predictions.player import predict_player
@@ -39,8 +39,13 @@ async def player_fantasy(
     as_of_date = date.today()
     try:
         prediction = await predict_player(session, player_id, game_id, as_of_date)
-    except PredictionError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except NotFoundError as e:
+        # Safe to echo: NotFoundError messages are authored in this codebase
+        # and contain only identifiers the caller already supplied. A bare
+        # PredictionError is deliberately NOT caught here - it falls through to
+        # the app-level handler, which logs the real error and returns a
+        # generic message rather than leaking upstream or driver text.
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     # Compute fantasy scores from predicted p50 values
     stat_dict = {p.stat: p.p50 for p in prediction.predictions}

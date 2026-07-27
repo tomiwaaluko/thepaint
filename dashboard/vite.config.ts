@@ -16,17 +16,19 @@ export default defineConfig({
     },
   },
   preview: {
+    // Explicit hosts only. `.up.railway.app` is a wildcard that accepts ANY
+    // Railway subdomain as a Host header, including someone else's deployment.
     allowedHosts: [
       'thepaint-production.up.railway.app',
       'thepaint-staging.up.railway.app',
-      '.up.railway.app',
     ],
   },
   server: {
+    // Explicit hosts only. `.up.railway.app` is a wildcard that accepts ANY
+    // Railway subdomain as a Host header, including someone else's deployment.
     allowedHosts: [
       'thepaint-production.up.railway.app',
       'thepaint-staging.up.railway.app',
-      '.up.railway.app',
     ],
     proxy: {
       '/v1': 'http://localhost:8000',

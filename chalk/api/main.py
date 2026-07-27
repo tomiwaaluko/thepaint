@@ -38,8 +38,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — origins controlled by ALLOWED_ORIGINS env var (comma-separated or "*")
-_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",")]
+# CORS — origins controlled by the ALLOWED_ORIGINS env var (comma-separated).
+#
+# "*" is rejected rather than passed through. It is currently survivable
+# because allow_credentials defaults to False, but the two settings live in
+# different files and nothing couples them: adding allow_credentials=True below
+# while ALLOWED_ORIGINS happened to be "*" would silently let any site on the
+# internet make credentialed calls. Refuse the wildcard so that combination
+# cannot be reached by accident.
+_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+if "*" in _origins:
+    raise ValueError(
+        'ALLOWED_ORIGINS must not contain "*". List the exact origins that '
+        "should be permitted (comma-separated)."
+    )
+if not _origins:
+    raise ValueError("ALLOWED_ORIGINS must list at least one origin.")
+
+
+# Swagger UI and ReDoc are the only routes that legitimately render HTML and
+# load scripts, so they cannot use the API's deny-everything CSP.
+_HTML_DOC_PATHS = frozenset({"/docs", "/redoc", "/docs/oauth2-redirect"})
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
@@ -47,6 +68,31 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=()"
+        # Railway terminates TLS, so real traffic already arrives over HTTPS;
+        # HSTS stops a downgrade attempt on the first hop.
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains"
+        )
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+
+        if request.url.path in _HTML_DOC_PATHS:
+            # Swagger/ReDoc pull their assets from a CDN and bootstrap inline.
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https://fastapi.tiangolo.com; "
+                "font-src 'self' https://cdn.jsdelivr.net; "
+                "frame-ancestors 'none'; base-uri 'self'"
+            )
+        else:
+            # JSON responses have no legitimate rendering context. If one is
+            # ever coerced into being treated as a document, it still cannot
+            # load scripts, styles, or any subresource.
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; "
+                "form-action 'none'"
+            )
         return response
 
 

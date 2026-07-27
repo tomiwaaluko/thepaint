@@ -97,8 +97,9 @@ async def test_player_fantasy_caches_result(mock_predict, override_deps):
 @pytest.mark.asyncio
 @patch("chalk.api.routes.fantasy.predict_player")
 async def test_player_fantasy_404_unknown(mock_predict, override_deps):
-    from chalk.exceptions import PredictionError
-    mock_predict.side_effect = PredictionError("not found")
+    from chalk.exceptions import NotFoundError
+
+    mock_predict.side_effect = NotFoundError("not found")
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

@@ -14,13 +14,24 @@ class Settings(BaseSettings):
     NBA_API_CACHE_DIR: Path = Path(".cache/nba_api")
     # Comma-separated list of allowed CORS origins.
     # Override in production via ALLOWED_ORIGINS env var.
+    # NOTE: the localhost entry is a development convenience that ships as a
+    # default. It is harmless today (credentials are not allowed, and the API
+    # carries no session), but it means production runs with a dev origin
+    # trusted unless ALLOWED_ORIGINS is set explicitly. Set it in Railway.
     ALLOWED_ORIGINS: str = "https://thepaint-production.up.railway.app,http://localhost:5173"
     # Optional token required to call DELETE /games/{id}/cache and to use the
     # nocache query param on prediction endpoints. Leave unset to disable both.
     CACHE_INVALIDATION_TOKEN: str = ""
-    # Per-client (IP) rate limiting. Counters live in Redis; the limiter fails
-    # open if Redis is unavailable.
+    # Per-client (IP) rate limiting. Counters live in Redis; if Redis is
+    # unavailable the limiter degrades to a per-process counter rather than
+    # failing open.
     RATE_LIMIT_ENABLED: bool = True
+    # Number of proxies in front of this service that append to
+    # X-Forwarded-For. The client address is read as the Nth entry from the
+    # right; entries to its left are caller-supplied and must not be trusted.
+    # Railway's edge is one hop. Set to 0 when nothing is in front, which makes
+    # the limiter use the socket peer and ignore the header entirely.
+    TRUSTED_PROXY_HOPS: int = 1
     # Requests per minute for general endpoints.
     RATE_LIMIT_PER_MINUTE: int = 120
     # Requests per minute for model-inference endpoints (/predict, /props, /fantasy).

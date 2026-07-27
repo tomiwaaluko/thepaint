@@ -125,7 +125,9 @@ def _invalidation_token_valid(provided: str | None) -> bool:
 
 @router.delete("/{game_id}/cache")
 async def clear_game_cache(
-    game_id: str,
+    # Pattern-validated like every other game_id in this file. This one was
+    # missed, and the value is interpolated straight into a Redis key below.
+    game_id: str = Path(..., pattern=GAME_ID_PATTERN, description="NBA or ESPN game ID"),
     x_invalidation_token: str | None = Header(None, alias="X-Invalidation-Token"),
     redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
