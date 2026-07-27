@@ -167,6 +167,33 @@ async def test_local_counter_is_bounded(monkeypatch):
     assert len(ratelimit._local_counts) <= ratelimit._MAX_LOCAL_KEYS
 
 
+async def test_local_counter_overflow_fails_closed_and_preserves_counts():
+    """Overflow must throttle the new key, not reset everyone else's.
+
+    Bounding the map by clearing it made the ceiling resettable by the party it
+    constrains - flush with 10k keys, spend your allowance, flush again - and
+    the flush also zeroed legitimate callers' counters. New keys are now
+    throttled once the map is full.
+    """
+    ratelimit._local_counts.clear()
+    ratelimit._local_window = None
+
+    # An established caller with a count worth protecting.
+    assert ratelimit._local_incr("victim", window=300) == 1
+    assert ratelimit._local_incr("victim", window=300) == 2
+
+    # Fill the map.
+    for i in range(ratelimit._MAX_LOCAL_KEYS):
+        ratelimit._local_incr(f"filler-{i}", window=300)
+
+    # A brand-new key is refused rather than admitted.
+    assert ratelimit._local_incr("attacker", window=300) == ratelimit._OVERFLOW_COUNT
+    assert len(ratelimit._local_counts) <= ratelimit._MAX_LOCAL_KEYS
+
+    # And the established caller's count survived - it was not reset.
+    assert ratelimit._local_counts["victim"] == 2
+
+
 async def test_nocache_without_token_is_rejected(api_client_factory, monkeypatch):
     monkeypatch.setattr(settings, "CACHE_INVALIDATION_TOKEN", "sekrit")
     async with api_client_factory() as client:
@@ -301,3 +328,44 @@ def test_client_ip_falls_back_when_no_header(monkeypatch):
     monkeypatch.setattr(settings, "TRUSTED_PROXY_HOPS", 1)
     assert ratelimit._client_ip(_FakeRequest({}, peer="198.51.100.4")) == "198.51.100.4"
     assert ratelimit._client_ip(_FakeRequest({}, peer=None)) == "unknown"
+
+
+def test_client_ip_rejects_non_ip_entry(monkeypatch):
+    """A misconfigured hop count must not let a caller mint arbitrary buckets.
+
+    If TRUSTED_PROXY_HOPS is set higher than the real hop count, the selected
+    entry is one the caller wrote. Without an IP check that could be any string,
+    giving them a fresh bucket per request while honest traffic - which sends no
+    header, falls short of the hop count, and lands on the shared proxy peer -
+    collapses into one bucket. That is worse than having no limiter.
+    """
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_HOPS", 2)
+    req = _FakeRequest(
+        {"x-forwarded-for": "not-an-ip, 198.51.100.9"}, peer="203.0.113.1"
+    )
+    assert ratelimit._client_ip(req) == "203.0.113.1"
+
+
+def test_client_ip_accepts_ipv6(monkeypatch):
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_HOPS", 1)
+    req = _FakeRequest({"x-forwarded-for": "2001:db8::1"})
+    assert ratelimit._client_ip(req) == "2001:db8::1"
+
+
+def test_client_ip_accepts_ipv4_with_port(monkeypatch):
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_HOPS", 1)
+    req = _FakeRequest({"x-forwarded-for": "198.51.100.9:41234"})
+    assert ratelimit._client_ip(req) == "198.51.100.9:41234"
+
+
+def test_trusted_proxy_hops_is_bounded():
+    """An out-of-range hop count must be rejected at config load, not silently used."""
+    import pydantic
+    import pytest as _pytest
+
+    from chalk.config import Settings
+
+    with _pytest.raises(pydantic.ValidationError):
+        Settings(TRUSTED_PROXY_HOPS=99)
+    with _pytest.raises(pydantic.ValidationError):
+        Settings(TRUSTED_PROXY_HOPS=-1)

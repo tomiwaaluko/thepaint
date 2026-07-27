@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -31,7 +32,9 @@ class Settings(BaseSettings):
     # right; entries to its left are caller-supplied and must not be trusted.
     # Railway's edge is one hop. Set to 0 when nothing is in front, which makes
     # the limiter use the socket peer and ignore the header entirely.
-    TRUSTED_PROXY_HOPS: int = 1
+    # Bounded: a value larger than the real hop count selects an entry the
+    # CALLER wrote, which is worse than having no limiter at all.
+    TRUSTED_PROXY_HOPS: int = Field(default=1, ge=0, le=4)
     # Requests per minute for general endpoints.
     RATE_LIMIT_PER_MINUTE: int = 120
     # Requests per minute for model-inference endpoints (/predict, /props, /fantasy).

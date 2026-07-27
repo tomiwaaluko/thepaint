@@ -11,6 +11,7 @@ controls at the same moment -- exactly when the backend is least able to absorb
 load. The local counter is per-process and therefore approximate behind multiple
 replicas, but it keeps a ceiling in place.
 """
+import ipaddress
 import time
 from collections import defaultdict
 from threading import Lock
@@ -38,21 +39,39 @@ _redis: aioredis.Redis | None = None
 # not being shared between replicas. Bounded by _MAX_LOCAL_KEYS so a caller
 # rotating identifiers cannot grow it without limit.
 _MAX_LOCAL_KEYS = 10_000
+# Returned for a new key once the map is full: larger than any configured
+# per-minute limit, so the request is throttled rather than admitted.
+_OVERFLOW_COUNT = 1_000_000
 _local_counts: dict[str, int] = defaultdict(int)
 _local_window: int | None = None
 _local_lock = Lock()
 
 
 def _local_incr(key: str, window: int) -> int:
-    """Increment the in-process counter for ``key``, returning the new count."""
+    """Increment the in-process counter for ``key``, returning the new count.
+
+    Returns a deliberately over-limit sentinel when the map is full and ``key``
+    is new.
+    """
     global _local_window
     with _local_lock:
         # Fixed windows: drop everything when the minute rolls over.
         if _local_window != window:
             _local_window = window
             _local_counts.clear()
-        if len(_local_counts) >= _MAX_LOCAL_KEYS and key not in _local_counts:
-            _local_counts.clear()
+
+        if key not in _local_counts and len(_local_counts) >= _MAX_LOCAL_KEYS:
+            # Fail CLOSED on overflow rather than clearing the map.
+            #
+            # Clearing was the obvious way to bound memory, but it made the
+            # ceiling resettable by the party it constrains: flush the map with
+            # 10k distinct keys, spend your allowance, flush again. Worse, the
+            # flush also zeroed every legitimate caller's counter - so the
+            # fallback gave its weakest guarantee under exactly the distributed
+            # load it exists to survive. Throttling unknown keys once the map is
+            # full keeps memory bounded without handing anyone a reset.
+            return _OVERFLOW_COUNT
+
         _local_counts[key] += 1
         return _local_counts[key]
 
@@ -68,6 +87,46 @@ def _get_redis() -> aioredis.Redis:
             socket_timeout=0.5,
         )
     return _redis
+
+
+def _is_ip_address(value: str) -> bool:
+    """True if ``value`` parses as an IPv4/IPv6 address.
+
+    Handles the bracketed-with-port form some proxies emit (``[::1]:443``).
+    """
+    candidate = value
+    if candidate.startswith("["):
+        candidate = candidate[1:].split("]", 1)[0]
+    elif candidate.count(":") == 1:
+        # host:port for IPv4; a bare IPv6 address has more than one colon.
+        candidate = candidate.rsplit(":", 1)[0]
+    try:
+        ipaddress.ip_address(candidate)
+    except ValueError:
+        return False
+    return True
+
+
+_peer_fallback_warned = False
+
+
+def _warn_peer_fallback(reason: str, hops: int, entry_count: int) -> None:
+    """Log once per process when the header is rejected in favour of the peer.
+
+    Worth a log line because the usual cause is a TRUSTED_PROXY_HOPS that does
+    not match the deployment, and the symptom otherwise - every caller sharing
+    one bucket and the API throttling globally - looks nothing like its cause.
+    """
+    global _peer_fallback_warned
+    if not _peer_fallback_warned:
+        _peer_fallback_warned = True
+        log.warning(
+            "rate_limit_peer_fallback",
+            reason=reason,
+            trusted_proxy_hops=hops,
+            xff_entries=entry_count,
+            hint="check TRUSTED_PROXY_HOPS matches the number of proxies in front of this service",
+        )
 
 
 def _client_ip(request: Request) -> str:
@@ -107,9 +166,26 @@ def _client_ip(request: Request) -> str:
     if len(entries) < hops:
         # Fewer hops than configured means the request did not traverse the
         # expected chain. Trust the socket rather than a caller-supplied value.
+        _warn_peer_fallback("xff_shorter_than_configured_hops", hops, len(entries))
         return peer
 
-    return entries[-hops]
+    candidate = entries[-hops]
+
+    # The selected entry must actually be an IP address.
+    #
+    # If TRUSTED_PROXY_HOPS is set HIGHER than the real hop count, the entry at
+    # that position is one the caller wrote - and without this check it could be
+    # any string at all, letting them mint a fresh bucket per request while
+    # honest traffic (which sends no header, falls short of the hop count, and
+    # lands on the shared proxy `peer`) collapses into a single bucket. That is
+    # strictly worse than having no limiter. Requiring a parseable IP does not
+    # make a misconfiguration correct, but it removes the arbitrary-string
+    # bypass and leaves the failure symmetric.
+    if not _is_ip_address(candidate):
+        _warn_peer_fallback("xff_entry_not_an_ip", hops, len(entries))
+        return peer
+
+    return candidate
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

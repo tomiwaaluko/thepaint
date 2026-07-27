@@ -18,10 +18,22 @@
 - CI gained `pip-audit`, `npm audit`, and gitleaks secret scanning; added Dependabot targeting `railway`. Nothing checked the pinned dependencies against a CVE feed.
 - `SECURITY.md` now states the threat model explicitly - that the API is intentionally unauthenticated and `/docs` is public, and that `models/*.joblib` are pickle-based and loaded at web-process startup.
 
+### Fixed during review
+A `ce-security-reviewer` pass on the first draft caught three things that would have broken the build or the local stack, and two that weakened the fixes themselves:
+
+- **`docker-compose.yml` did not parse.** A colon-space inside an unquoted YAML plain scalar (the Fernet error message) made the entire file unreadable - not just the airflow services, but `docker compose up db` too. Values quoted; `docker compose config -q` added to CI.
+- **`ruff check .` failed.** The `S` triage covered `chalk/`, `scripts/` and `tests/` but not `alembic/env.py`, which CI does check. The "ruff clean" claim in the first draft of this entry was simply wrong. Fixed by logging the swallowed exception there.
+- **Both lockfiles were compiled on Windows without `--universal`**, which pinned `pywin32` unconditionally (uninstallable on the CI runner), dropped `uvloop`, and unpinned `nvidia-nccl-cu12` - a package pip would still install into the image, so it would have been the one unpinned dependency and also the one `pip-audit` never saw. Regenerated with markers.
+- **`serve` was a devDependency** while being the dashboard's production start command; Railway prunes dev dependencies, so the frontend would have crash-looped. Moved to `dependencies`.
+- **A `TRUSTED_PROXY_HOPS` set higher than the real hop count was worse than the old code** - the attacker picks their own bucket while honest traffic collapses into one. Now bounded (`ge=0, le=4`), the selected entry must parse as an IP, and the peer-fallback path logs once so a misconfiguration is visible.
+- **The local-counter overflow reset every caller's count**, making the ceiling resettable by the party it constrains. Now fails closed for new keys instead.
+- **`_urlopen_https` did not survive redirects** - urllib follows them by default and the stock handler permits `http` and `ftp` targets. Added a redirect handler that re-checks the scheme per hop, and corrected the docstring, which had overstated the guarantee.
+- Also: `get_redis` built a new connection pool per request; ReDoc's webfonts were blocked by the docs CSP.
+
 ### Metrics
-- Tests: **329 passed** (was 317). New coverage for XFF hop handling, the local-counter fallback and its bounds, and window rollover.
-- Ruff: clean with `S` enabled.
-- Runtime dependencies: 115 -> 62 packages.
+- Tests: **334 passed** (was 317). New coverage for XFF hop handling and IP validation, the local-counter fallback, its fail-closed overflow, window rollover, and the `TRUSTED_PROXY_HOPS` bounds.
+- Ruff: clean on `ruff check .` with `S` enabled (verified against the same command CI runs).
+- Runtime lockfile: 115 -> 64 packages.
 
 ### Pending
 - Authentication on the public API is deliberately out of scope - it would break the deployed dashboard and is a product decision.

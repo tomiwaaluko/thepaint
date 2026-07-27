@@ -29,6 +29,11 @@ async def lifespan(app: FastAPI):
             log.warning("model_load_failed", stat=stat, error=str(e))
     log.info("models_warmup_complete")
     yield
+    # The Redis client is process-wide (see api/dependencies.py); close it once
+    # here rather than per request.
+    from chalk.api.dependencies import close_redis_client
+
+    await close_redis_client()
 
 
 app = FastAPI(
@@ -80,9 +85,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                # ReDoc pulls its webfonts from Google Fonts.
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
+                "https://fonts.googleapis.com; "
                 "img-src 'self' data: https://fastapi.tiangolo.com; "
-                "font-src 'self' https://cdn.jsdelivr.net; "
+                "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; "
                 "frame-ancestors 'none'; base-uri 'self'"
             )
         else:

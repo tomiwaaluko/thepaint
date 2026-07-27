@@ -106,3 +106,30 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  config:
+    name: Config — compose + runtime lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # A colon inside an unquoted YAML scalar silently broke the whole compose
+      # file once; this catches that class before it lands.
+      - name: Validate docker-compose.yml
+        env:
+          AIRFLOW_FERNET_KEY: ci-placeholder
+          AIRFLOW_SECRET_KEY: ci-placeholder
+          AIRFLOW_ADMIN_PASSWORD: ci-placeholder
+        run: docker compose --profile airflow config -q
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # CI otherwise only installs requirements-dev.txt, so a lockfile that is
+      # uninstallable on Linux (platform-specific pins from a Windows compile)
+      # would only surface at image build time.
+      - name: Runtime lockfile resolves on Linux
+        run: pip install --dry-run --report /dev/null -r requirements.txt

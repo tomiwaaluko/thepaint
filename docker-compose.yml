@@ -70,6 +70,9 @@ services:
     working_dir: /app
 
   airflow-init:
+    # Local development only - Railway cron replaces Airflow in production.
+    # Start explicitly with: docker compose --profile airflow up
+    profiles: [airflow]
     image: apache/airflow:2.9.0
     environment: &airflow-env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -86,8 +89,8 @@ services:
       #
       # `:?` makes Compose refuse to start with a clear message instead of
       # silently using a broken default.
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"}
-      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:?set to a random value, e.g. openssl rand -hex 32}
+      AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW_FERNET_KEY:?required - see .env.example for the generation command}"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "${AIRFLOW_SECRET_KEY:?required - see .env.example}"
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       DATABASE_URL: postgresql+asyncpg://chalk:chalk@db:5432/chalk
       REDIS_URL: redis://redis:6379/0
@@ -99,7 +102,7 @@ services:
         airflow db init &&
         airflow users create
           --username ${AIRFLOW_ADMIN_USER:-admin}
-          --password ${AIRFLOW_ADMIN_PASSWORD:?set AIRFLOW_ADMIN_PASSWORD, e.g. openssl rand -base64 24}
+          --password '${AIRFLOW_ADMIN_PASSWORD:?required - see .env.example}'
           --firstname Admin
           --lastname User
           --role Admin
@@ -114,6 +117,9 @@ services:
         condition: service_healthy
 
   airflow-webserver:
+    # Local development only - Railway cron replaces Airflow in production.
+    # Start explicitly with: docker compose --profile airflow up
+    profiles: [airflow]
     image: apache/airflow:2.9.0
     environment: *airflow-env
     ports:
@@ -129,6 +135,9 @@ services:
     restart: unless-stopped
 
   airflow-scheduler:
+    # Local development only - Railway cron replaces Airflow in production.
+    # Start explicitly with: docker compose --profile airflow up
+    profiles: [airflow]
     image: apache/airflow:2.9.0
     environment: *airflow-env
     volumes:

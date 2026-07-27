@@ -79,20 +79,44 @@ NBA_HEADERS = {
 _NBA_PROXY: str | None = settings.NBA_PROXY_URL or None
 
 
+class _HTTPSOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-check the scheme on every redirect hop.
+
+    The stock handler permits redirects to ``http`` and ``ftp`` (it only blocks
+    exotic schemes), so a one-time check on the initial URL is not enough: a
+    302 to ``http://`` would be followed silently.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.lower().startswith("https://"):
+            raise IngestError(f"Refusing to follow non-HTTPS redirect to: {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_https_opener = urllib.request.build_opener(_HTTPSOnlyRedirectHandler)
+
+
 def _urlopen_https(url: str, timeout: int):
-    """Open ``url`` over HTTPS only.
+    """Open ``url`` over HTTPS, on the initial request and on every redirect.
 
     ``urllib.request.urlopen`` honours whatever scheme it is handed, including
     ``file:`` and ``ftp:``. Every caller here passes a hardcoded https constant,
-    so this is defence in depth rather than a fix for a live bug - but it turns
-    "no caller currently passes a bad scheme" into an invariant that holds even
-    if one of these URLs later becomes configurable.
+    so this is defence in depth rather than a fix for a live bug.
+
+    Checking only the initial URL would NOT have been enough - urllib follows
+    redirects by default and the stock redirect handler allows http and ftp
+    targets, so an upstream 302 would quietly downgrade the connection. The
+    custom opener above re-applies the check per hop.
+
+    Note this constrains the scheme, not the destination host: it is not an
+    SSRF control. If any of these URLs ever becomes configurable, add an
+    explicit host allowlist as well.
     """
-    if not url.startswith("https://"):
+    if not url.lower().startswith("https://"):
         raise IngestError(f"Refusing to fetch non-HTTPS URL: {url}")
-    # Scheme is validated immediately above, which is what S310 asks for.
+    # Scheme is validated here and on every redirect hop by the opener.
     req = urllib.request.Request(url, headers={"User-Agent": NBA_HEADERS["User-Agent"]})  # noqa: S310
-    return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
+    return _https_opener.open(req, timeout=timeout)
 
 
 def _cache_path(endpoint: str, params: dict) -> Path:
