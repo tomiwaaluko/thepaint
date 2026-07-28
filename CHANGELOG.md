@@ -37,6 +37,13 @@ The new workflow is the first thing to have ever run this suite on a UTC machine
 
 ### Not changed
 - The `pip-audit` step stays a hard failure. Every dependency here is pinned, so a fix is normally a one-line bump; the workflow now documents `--ignore-vuln` as the escape hatch for an advisory with no published fix, so the next person patches the gate rather than deleting it.
+
+### Dashboard dependency audit
+With `pip-audit` green, the audit job's failure moved to its next step. `npm audit` reported 8 high-severity advisories in the dashboard, including path traversal and arbitrary file read in vite, all with a non-breaking fix that had simply never been taken. Taken now - lockfile only, no direct dependency moved, lint clean and build passing.
+
+`npm audit --audit-level=high` is replaced by `.github/scripts/audit-gate.mjs`. The flag fails on advisories with no available fix as readily as on ones you are ignoring, and what remains here is exactly that category: `react-router` can only be cleared by the 6 → 7 major, which is a product decision this branch deliberately does not make. The gate blocks on what can be fixed today and prints the rest into the job summary, so the unfixable stay visible rather than pinning the job red forever.
+
+Also verified the regenerated lockfile with a real `npm ci` inside `node:20-alpine`. A lockfile written on Windows is not necessarily installable on Linux - the same lesson `requirements.txt` taught earlier in this branch, and it bit all three sibling repos in this security pass.
 - Also: `get_redis` built a new connection pool per request; ReDoc's webfonts were blocked by the docs CSP.
 
 ### Metrics
