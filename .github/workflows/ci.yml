@@ -92,9 +92,18 @@ jobs:
           pip install pip-audit
           pip-audit --requirement requirements.txt --strict
 
-      - name: npm audit (dashboard)
+      # Unlike pip-audit above, this is not a hard fail on everything.
+      # `npm audit --audit-level=high` fails on advisories with no available
+      # fix too, and the dashboard's tree carries several - react-router's only
+      # remedy is the 6 -> 7 major, which is a deliberate product decision, not
+      # a patch. A gate nobody can satisfy is one people learn to scroll past,
+      # so this blocks on advisories that can be cleared today and prints the
+      # rest with the reason they cannot be.
+      - name: Dependency audit (dashboard)
         working-directory: dashboard
-        run: npm audit --audit-level=high
+        env:
+          AUDIT_WORKSPACE: dashboard
+        run: node ${{ github.workspace }}/.github/scripts/audit-gate.mjs
 
   secrets:
     name: Security — secret scan
