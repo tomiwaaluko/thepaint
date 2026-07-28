@@ -60,3 +60,91 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  audit:
+    name: Security — dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      # Nothing checked the 60+ pinned Python packages against a CVE feed.
+      # The lockfiles were reproducible but never audited.
+      #
+      # This gate is a hard fail on purpose: every dependency here is pinned in
+      # requirements.txt, so a fix is normally a one-line bump
+      # (uv pip compile ... --upgrade-package <name>). If an advisory ever lands
+      # with no fixed version published, add `--ignore-vuln <ID>` with a comment
+      # naming the advisory and why it is not reachable. Do not delete the step.
+      - name: pip-audit (runtime dependencies)
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --strict
+
+      # Unlike pip-audit above, this is not a hard fail on everything.
+      # `npm audit --audit-level=high` fails on advisories with no available
+      # fix too, and the dashboard's tree carries several - react-router's only
+      # remedy is the 6 -> 7 major, which is a deliberate product decision, not
+      # a patch. A gate nobody can satisfy is one people learn to scroll past,
+      # so this blocks on advisories that can be cleared today and prints the
+      # rest with the reason they cannot be.
+      - name: Dependency audit (dashboard)
+        working-directory: dashboard
+        env:
+          AUDIT_WORKSPACE: dashboard
+        run: node ${{ github.workspace }}/.github/scripts/audit-gate.mjs
+
+  secrets:
+    name: Security — secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: a secret committed and later deleted is still in the
+          # objects, and SECURITY.md's first contributor rule is "never commit
+          # secrets" - which nothing was enforcing.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  config:
+    name: Config — compose + runtime lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # A colon inside an unquoted YAML scalar silently broke the whole compose
+      # file once; this catches that class before it lands.
+      - name: Validate docker-compose.yml
+        env:
+          AIRFLOW_FERNET_KEY: ci-placeholder
+          AIRFLOW_SECRET_KEY: ci-placeholder
+          AIRFLOW_ADMIN_PASSWORD: ci-placeholder
+        run: docker compose --profile airflow config -q
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # CI otherwise only installs requirements-dev.txt, so a lockfile that is
+      # uninstallable on Linux (platform-specific pins from a Windows compile)
+      # would only surface at image build time.
+      - name: Runtime lockfile resolves on Linux
+        run: pip install --dry-run --report /dev/null -r requirements.txt

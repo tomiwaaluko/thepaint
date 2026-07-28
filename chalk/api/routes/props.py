@@ -18,7 +18,7 @@ from chalk.betting.over_under import (
     remove_vig,
 )
 from chalk.db.models import BettingLine
-from chalk.exceptions import PredictionError
+from chalk.exceptions import NotFoundError
 from chalk.predictions.player import predict_player
 
 log = structlog.get_logger()
@@ -58,8 +58,13 @@ async def player_props(
     # Get player prediction
     try:
         prediction = await predict_player(session, player_id, game_id, as_of_date)
-    except PredictionError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except NotFoundError as e:
+        # Safe to echo: NotFoundError messages are authored in this codebase
+        # and contain only identifiers the caller already supplied. A bare
+        # PredictionError is deliberately NOT caught here - it falls through to
+        # the app-level handler, which logs the real error and returns a
+        # generic message rather than leaking upstream or driver text.
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     pred_map = {p.stat: p for p in prediction.predictions}
 

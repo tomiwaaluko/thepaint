@@ -22,8 +22,12 @@ if not _db_url:
     try:
         from chalk.config import settings
         _db_url = settings.DATABASE_URL
-    except Exception:
-        pass
+    except Exception as exc:
+        # Falling back to alembic.ini is intentional, but say so. Swallowing
+        # this silently meant a broken chalk.config import looked identical to
+        # "DATABASE_URL simply wasn't set", and migrations would then run
+        # against whatever alembic.ini points at - which is localhost.
+        print(f"alembic: could not read DATABASE_URL from chalk.config ({exc}); falling back to alembic.ini")
 if _db_url:
     config.set_main_option("sqlalchemy.url", _db_url)
 

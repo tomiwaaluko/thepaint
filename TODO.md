@@ -9,6 +9,31 @@ Never mark a task done unless tests pass and the acceptance criteria in the phas
 
 ## Current Status
 
+### Security hardening (2026-07-26, branch `chore/security`)
+
+Done:
+- [x] Rate-limit client-IP derivation driven by `TRUSTED_PROXY_HOPS` (was an implied hop count)
+- [x] Rate limiter degrades to a bounded in-process counter instead of failing open
+- [x] `NotFoundError` split so route handlers can no longer bypass error sanitization
+- [x] MLflow/Optuna moved to a `training` extra — runtime lockfile 115 -> 62 packages
+- [x] `ALLOWED_ORIGINS="*"` rejected at startup
+- [x] CSP/HSTS/COOP added, with `/docs` and `/redoc` exempted
+- [x] `game_id` pattern on `DELETE /v1/games/{id}/cache`
+- [x] Ruff `S` ruleset enabled, all 14 findings triaged
+- [x] docker-compose: broken Fernet default and Airflow admin password now fail closed; ports bound to loopback
+- [x] Dashboard served by `serve`, not `vite preview`; wildcard host removed
+- [x] `MODEL_DIR` no longer CWD-relative
+- [x] Raw-SQL f-string parameterized
+- [x] CI: pip-audit, npm audit, gitleaks; Dependabot targeting `railway`
+- [x] `SECURITY.md` states the threat model (unauthenticated API, public `/docs`, pickle-based model loading)
+
+Open, needs an operator decision:
+- [ ] Confirm `TRUSTED_PROXY_HOPS=1` matches the live Railway topology
+- [ ] Set `ALLOWED_ORIGINS` explicitly in Railway (the default bakes in a localhost origin)
+- [ ] Decide whether to authenticate the public API — deliberately out of scope, breaks the dashboard
+- [ ] Consider hash-pinning `models/*.joblib`; they execute code on load at web-process startup
+
+
 **Active Phase:** Phase 9 - AI Injury Agent
 **Current Task:** ESPN/Gemini injury ingestion pipeline and dashboard injury status defaults
 **Last Updated:** Session 11

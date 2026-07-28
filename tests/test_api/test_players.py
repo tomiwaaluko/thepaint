@@ -153,8 +153,12 @@ async def test_predict_player_caches_result(mock_predict, override_deps_with_pre
 @pytest.mark.asyncio
 @patch("chalk.api.routes.players.predict_player")
 async def test_predict_player_404_on_unknown_player(mock_predict, override_deps_with_prediction):
-    from chalk.exceptions import PredictionError
-    mock_predict.side_effect = PredictionError("Player 9999999 not found")
+    from chalk.exceptions import NotFoundError
+
+    # NotFoundError, not a bare PredictionError: only the former is echoed to
+    # the caller as a 404. A bare PredictionError may wrap upstream or driver
+    # text and is deliberately handled by the app-level sanitizing handler.
+    mock_predict.side_effect = NotFoundError("Player 9999999 not found")
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

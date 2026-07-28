@@ -13,7 +13,7 @@ from chalk.api.schemas import (
     StatPrediction,
 )
 from chalk.db.models import Game, Injury, Player, Team
-from chalk.exceptions import PredictionError
+from chalk.exceptions import NotFoundError, PredictionError
 from chalk.features.pipeline import generate_features
 from chalk.models.registry import (
     get_model_version,
@@ -42,12 +42,12 @@ async def predict_player(
     # Load player and game
     player = await session.get(Player, player_id)
     if not player:
-        raise PredictionError(f"Player {player_id} not found")
+        raise NotFoundError(f"Player {player_id} not found")
 
     result = await session.execute(select(Game).where(Game.game_id == game_id))
     game = result.scalar_one_or_none()
     if not game:
-        raise PredictionError(f"Game {game_id} not found")
+        raise NotFoundError(f"Game {game_id} not found")
 
     # Determine opponent
     if game.home_team_id == player.team_id:

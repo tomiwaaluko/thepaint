@@ -102,8 +102,9 @@ async def test_props_probabilities_sum_to_one(mock_predict, override_deps):
 @pytest.mark.asyncio
 @patch("chalk.api.routes.props.predict_player")
 async def test_props_404_unknown_player(mock_predict, override_deps):
-    from chalk.exceptions import PredictionError
-    mock_predict.side_effect = PredictionError("not found")
+    from chalk.exceptions import NotFoundError
+
+    mock_predict.side_effect = NotFoundError("not found")
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

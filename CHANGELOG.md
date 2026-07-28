@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-07-26 — Security hardening pass
+
+### Done
+- **Rate-limit bypass closed.** `_client_ip` took the last `X-Forwarded-For` entry with the hop count implied rather than stated; it is now driven by a `TRUSTED_PROXY_HOPS` setting (default 1, `0` ignores the header entirely). Getting this wrong fails in both directions - too far left and callers choose their own bucket, too far right and every caller shares one.
+- **Correlated fail-open removed.** The limiter allowed every request when Redis was unreachable. Because the ingest stampede lock in `routes/games.py` also defaults to acquired on a Redis error, one outage removed both abuse controls simultaneously. The limiter now degrades to a bounded in-process counter.
+- **Error sanitization is no longer bypassable.** Five routes caught `PredictionError` and re-raised `detail=str(e)`, so the sanitizing handler added in CHA-8 never fired on the paths that most commonly raise. Added a `NotFoundError` subclass for messages we author (safe to echo); a bare `PredictionError` now reaches the app-level handler as intended.
+- **MLflow and Optuna moved to a `training` extra.** `CLAUDE.md` states MLflow is not deployed in production, yet it was a hard runtime dependency pulling flask, werkzeug, gunicorn, graphene, gitpython and pyarrow into the API image. Runtime lockfile went from **115 to 62 packages**.
+- **`ALLOWED_ORIGINS="*"` is now rejected at startup.** Survivable today only because `allow_credentials` defaults to False - two settings in different files with nothing coupling them.
+- CSP, HSTS and COOP added to `SecurityHeadersMiddleware`, with `/docs` and `/redoc` exempted so Swagger still renders.
+- `DELETE /v1/games/{game_id}/cache` now pattern-validates `game_id` like every other route in that file.
+- Ruff's `S` (flake8-bandit) ruleset enabled - it was off, so the linter caught zero security issues and a `# noqa: S311` already existed for a rule that was not enabled. All 14 findings triaged: md5 cache keys marked `usedforsecurity=False`, `urlopen` calls routed through a scheme-checking helper, jitter suppressions justified inline, and a silent `except: pass` in `scripts/ingest_recent.py` now reports failures.
+- `docker-compose.yml`: the Fernet key default used `$(...)` inside a YAML value, which Compose does not evaluate - every deployment shared one literal non-key and Airflow's connection encryption was worthless. Now fails closed, as does the Airflow admin password. All published ports bound to `127.0.0.1`.
+- `dashboard` is served by `serve` instead of `vite preview` (explicitly not a production server, and `npx` re-resolved the package at container start); dropped the `.up.railway.app` wildcard host.
+- `MODEL_DIR` resolved from `__file__` rather than the process working directory.
+- The repo's only raw-SQL f-string (`scripts/ingest_recent.py`) is parameterized.
+- CI gained `pip-audit`, `npm audit`, and gitleaks secret scanning; added Dependabot targeting `railway`. Nothing checked the pinned dependencies against a CVE feed.
+- `SECURITY.md` now states the threat model explicitly - that the API is intentionally unauthenticated and `/docs` is public, and that `models/*.joblib` are pickle-based and loaded at web-process startup.
+
+### Fixed during review
+A `ce-security-reviewer` pass on the first draft caught three things that would have broken the build or the local stack, and two that weakened the fixes themselves:
+
+- **`docker-compose.yml` did not parse.** A colon-space inside an unquoted YAML plain scalar (the Fernet error message) made the entire file unreadable - not just the airflow services, but `docker compose up db` too. Values quoted; `docker compose config -q` added to CI.
+- **`ruff check .` failed.** The `S` triage covered `chalk/`, `scripts/` and `tests/` but not `alembic/env.py`, which CI does check. The "ruff clean" claim in the first draft of this entry was simply wrong. Fixed by logging the swallowed exception there.
+- **Both lockfiles were compiled on Windows without `--universal`**, which pinned `pywin32` unconditionally (uninstallable on the CI runner), dropped `uvloop`, and unpinned `nvidia-nccl-cu12` - a package pip would still install into the image, so it would have been the one unpinned dependency and also the one `pip-audit` never saw. Regenerated with markers.
+- **`serve` was a devDependency** while being the dashboard's production start command; Railway prunes dev dependencies, so the frontend would have crash-looped. Moved to `dependencies`.
+- **A `TRUSTED_PROXY_HOPS` set higher than the real hop count was worse than the old code** - the attacker picks their own bucket while honest traffic collapses into one. Now bounded (`ge=0, le=4`), the selected entry must parse as an IP, and the peer-fallback path logs once so a misconfiguration is visible.
+- **The local-counter overflow reset every caller's count**, making the ceiling resettable by the party it constrains. Now fails closed for new keys instead.
+- **`_urlopen_https` did not survive redirects** - urllib follows them by default and the stock handler permits `http` and `ftp` targets. Added a redirect handler that re-checks the scheme per hop, and corrected the docstring, which had overstated the guarantee.
+
+### Fixed after first CI run
+The new workflow is the first thing to have ever run this suite on a UTC machine, and it went red immediately. Neither failure was caused by the security changes; both were latent and are fixed here because the new gate is what surfaced them.
+
+- **`test_today_games_no_stale_fallback` is timezone-dependent.** It asserted the response date equalled `date.today()` - the *runner's* local date - while `/v1/games/today` computes the date in `America/New_York`. The two disagree for the four to five hours between 8 PM ET and midnight ET, which is exactly when the first CI run happened. The test now derives the expected date from the same zone the route uses, so it no longer depends on where or when it runs. The three other `date.today()` call sites in that file were doing the same thing as mock data and were changed to match.
+- **`pyasn1` 0.6.3 carried PYSEC-2026-3455/3456/3457** (transitive, via `pyasn1-modules` ← `google-auth`), all fixed in 0.6.4. Bumped in both lockfiles. Worth recording that a plain recompile did *not* pick this up - uv treats existing pins in the output file as preferences, so the bump needed `--upgrade-package pyasn1`. A recompile alone is not a dependency update.
+
+### Not changed
+- The `pip-audit` step stays a hard failure. Every dependency here is pinned, so a fix is normally a one-line bump; the workflow now documents `--ignore-vuln` as the escape hatch for an advisory with no published fix, so the next person patches the gate rather than deleting it.
+
+### Dashboard dependency audit
+With `pip-audit` green, the audit job's failure moved to its next step. `npm audit` reported 8 high-severity advisories in the dashboard, including path traversal and arbitrary file read in vite, all with a non-breaking fix that had simply never been taken. Taken now - lockfile only, no direct dependency moved, lint clean and build passing.
+
+`npm audit --audit-level=high` is replaced by `.github/scripts/audit-gate.mjs`. The flag fails on advisories with no available fix as readily as on ones you are ignoring, and what remains here is exactly that category: `react-router` can only be cleared by the 6 → 7 major, which is a product decision this branch deliberately does not make. The gate blocks on what can be fixed today and prints the rest into the job summary, so the unfixable stay visible rather than pinning the job red forever.
+
+Also verified the regenerated lockfile with a real `npm ci` inside `node:20-alpine`. A lockfile written on Windows is not necessarily installable on Linux - the same lesson `requirements.txt` taught earlier in this branch, and it bit all three sibling repos in this security pass.
+- Also: `get_redis` built a new connection pool per request; ReDoc's webfonts were blocked by the docs CSP.
+
+### Metrics
+- Tests: **334 passed** (was 317). New coverage for XFF hop handling and IP validation, the local-counter fallback, its fail-closed overflow, window rollover, and the `TRUSTED_PROXY_HOPS` bounds.
+- Ruff: clean on `ruff check .` with `S` enabled (verified against the same command CI runs).
+- Runtime lockfile: 115 -> 64 packages.
+
+### Pending
+- Authentication on the public API is deliberately out of scope - it would break the deployed dashboard and is a product decision.
+- The in-memory OAuth-style stampede lock and rate-limit fallback remain per-process; both assume a single replica.
+
+### Next
+- Decide whether `TRUSTED_PROXY_HOPS=1` matches the live Railway topology, and confirm `ALLOWED_ORIGINS` is set explicitly in the Railway dashboard.
+
 ## 2026-07-06 (later) — CHA-8: API error-response hardening
 
 ### Done

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "serve -s dist -l ${PORT:-3000}"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
@@ -18,6 +19,7 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
     "recharts": "^3.8.0",
+    "serve": "^14.2.6",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {

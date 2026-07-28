@@ -1,3 +1,10 @@
+# Local development stack. NOT a production deployment.
+#
+# Every published port is bound to 127.0.0.1 rather than 0.0.0.0: Postgres here
+# uses the well-known chalk/chalk credentials, and Redis and MLflow have no
+# authentication at all, so binding them to every interface exposed them to
+# anyone on the same network. Loopback keeps them reachable from the host and
+# nowhere else.
 services:
   db:
     image: timescale/timescaledb:latest-pg15
@@ -6,7 +13,7 @@ services:
       POSTGRES_PASSWORD: chalk
       POSTGRES_DB: chalk
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +25,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -28,7 +35,7 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.10.0
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     environment:
       MLFLOW_BACKEND_STORE_URI: postgresql://chalk:chalk@db:5432/mlflow
       MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
@@ -47,7 +54,7 @@ services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://chalk:chalk@db:5432/chalk
       REDIS_URL: redis://redis:6379/0
@@ -63,12 +70,27 @@ services:
     working_dir: /app
 
   airflow-init:
+    # Local development only - Railway cron replaces Airflow in production.
+    # Start explicitly with: docker compose --profile airflow up
+    profiles: [airflow]
     image: apache/airflow:2.9.0
     environment: &airflow-env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://chalk:chalk@db:5432/airflow
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")}
-      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-chalk-airflow-secret-key-change-me}
+      # Airflow encrypts stored connection credentials with this key.
+      #
+      # This previously read:
+      #   ${AIRFLOW_FERNET_KEY:-$(python3 -c "...Fernet.generate_key()...")}
+      # which LOOKS like it generates a key per deployment but does not -
+      # Compose performs no command substitution inside a YAML value, so the
+      # fallback was that literal string. Every deployment that did not set the
+      # variable therefore shared one identical non-key, and Airflow's
+      # connection encryption was worthless.
+      #
+      # `:?` makes Compose refuse to start with a clear message instead of
+      # silently using a broken default.
+      AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW_FERNET_KEY:?required - see .env.example for the generation command}"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "${AIRFLOW_SECRET_KEY:?required - see .env.example}"
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       DATABASE_URL: postgresql+asyncpg://chalk:chalk@db:5432/chalk
       REDIS_URL: redis://redis:6379/0
@@ -79,12 +101,12 @@ services:
       bash -c "
         airflow db init &&
         airflow users create
-          --username admin
-          --password admin
+          --username ${AIRFLOW_ADMIN_USER:-admin}
+          --password '${AIRFLOW_ADMIN_PASSWORD:?required - see .env.example}'
           --firstname Admin
           --lastname User
           --role Admin
-          --email admin@chalk.dev || true
+          --email ${AIRFLOW_ADMIN_EMAIL:-admin@chalk.dev} || true
       "
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -95,10 +117,13 @@ services:
         condition: service_healthy
 
   airflow-webserver:
+    # Local development only - Railway cron replaces Airflow in production.
+    # Start explicitly with: docker compose --profile airflow up
+    profiles: [airflow]
     image: apache/airflow:2.9.0
     environment: *airflow-env
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./chalk:/opt/airflow/chalk
@@ -110,6 +135,9 @@ services:
     restart: unless-stopped
 
   airflow-scheduler:
+    # Local development only - Railway cron replaces Airflow in production.
+    # Start explicitly with: docker compose --profile airflow up
+    profiles: [airflow]
     image: apache/airflow:2.9.0
     environment: *airflow-env
     volumes:

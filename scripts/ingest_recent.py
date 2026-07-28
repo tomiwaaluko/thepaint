@@ -45,6 +45,7 @@ async def main():
         all_active = nba_players.get_active_players()
         print(f"\n[2/2] Player game logs ({len(all_active)} active players)...")
         ingested = 0
+        failed = 0
         for i, player in enumerate(all_active, 1):
             try:
                 count = await ingest_player_season(
@@ -53,27 +54,39 @@ async def main():
                 )
                 if count > 0:
                     ingested += 1
-            except Exception:
-                pass
+            except Exception as exc:
+                # Continue past individual player failures - one bad response
+                # should not abort a 500-player backfill - but say so. Silently
+                # swallowing this made a run that ingested nothing look
+                # identical to a successful one.
+                failed += 1
+                print(f"  ! {player['full_name']} ({player['id']}): {exc}")
             if i % 50 == 0 or i == len(all_active):
-                print(f"  {i}/{len(all_active)} players processed ({ingested} with data)")
+                print(f"  {i}/{len(all_active)} players processed ({ingested} with data, {failed} failed)")
             await asyncio.sleep(INTER_REQUEST_DELAY)
 
         # 3. Show recent games now in DB
         cutoff = date.today() - timedelta(days=7)
-        r = await session.execute(text(f"""
-            SELECT g.game_id, g.date, ht.abbreviation, at.abbreviation,
-                   count(pl.player_id) as players
-            FROM games g
-            JOIN teams ht ON ht.team_id = g.home_team_id
-            JOIN teams at ON at.team_id = g.away_team_id
-            LEFT JOIN player_game_logs pl ON pl.game_id = g.game_id
-            WHERE g.season = '{CURRENT_SEASON}'
-              AND g.date >= '{cutoff.isoformat()}'
-            GROUP BY g.game_id, g.date, ht.abbreviation, at.abbreviation
-            ORDER BY g.date DESC
-            LIMIT 15
-        """))
+        # Bound parameters, not an f-string. Both values are internal today
+        # (a module constant and date.today()), so this was not exploitable -
+        # but it was the only raw-SQL f-string in the repo, and that shape is
+        # exactly what gets copied into a place where the inputs are not.
+        r = await session.execute(
+            text("""
+                SELECT g.game_id, g.date, ht.abbreviation, at.abbreviation,
+                       count(pl.player_id) as players
+                FROM games g
+                JOIN teams ht ON ht.team_id = g.home_team_id
+                JOIN teams at ON at.team_id = g.away_team_id
+                LEFT JOIN player_game_logs pl ON pl.game_id = g.game_id
+                WHERE g.season = :season
+                  AND g.date >= :cutoff
+                GROUP BY g.game_id, g.date, ht.abbreviation, at.abbreviation
+                ORDER BY g.date DESC
+                LIMIT 15
+            """),
+            {"season": CURRENT_SEASON, "cutoff": cutoff},
+        )
         rows = r.fetchall()
         print(f"\nRecent {CURRENT_SEASON} games now in DB (last 7 days):")
         for row in rows:
